@@ -1,0 +1,7 @@
+{
+  "watch": ["."],
+  "ext": "ts,js,json,ejs",
+  "ignore": ["node_modules/**", "*.test.ts"],
+  "exec": "tsx app.ts",
+  "restartable": "rs"
+}

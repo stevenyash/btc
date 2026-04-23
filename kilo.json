@@ -1,0 +1,13 @@
+{
+  "name": "btc",
+  "description": "BTC Learning Platform",
+  "commands": [
+    "add-component",
+    "add-page",
+    "add-icon",
+    "list-icons",
+    "icon-component"
+  ],
+  "frontendDir": "frontend-react",
+  "backendDir": "backend"
+}
