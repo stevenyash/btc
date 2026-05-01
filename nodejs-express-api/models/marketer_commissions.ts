@@ -1,4 +1,4 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 type PurchaseType = 'subscription' | 'package' | 'tutorial';
 type MarketerCommissionStatus = 'pending' | 'approved' | 'paid';

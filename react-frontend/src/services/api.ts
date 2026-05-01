@@ -13,7 +13,6 @@ const api = axios.create({
 
 const publicApi = axios.create({
   baseURL: API_PUBLIC_URL,
-  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -41,17 +40,58 @@ publicApi.interceptors.request.use((config) => {
   return config;
 });
 
-api.interceptors.response.use(
+publicApi.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
+    const config = error.response?.config;
 
     if (!error.response) {
       console.error("Network error - no response:", error.message);
+    } else if (status === 429) {
+      // Rate limit exceeded - add retry-after info to error
+      const retryAfter = error.response?.headers?.['retry-after'];
+      error.isRateLimit = true;
+      error.retryAfter = retryAfter;
     } else if (status === 401) {
       tokenService.removeToken();
       window.location.href = "/login";
     } else if (status === 403) {
+      // Check if this is a lesson stream URL request - if so, don't redirect, let component handle it
+      if (config?.url && config.url.includes('/lessons/stream-url/')) {
+        return Promise.reject(error);
+      }
+      window.location.href = "/unauthorized";
+    } else if (status === 500) {
+      console.error("Server error 500:", error.response?.data);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const config = error.response?.config;
+
+    if (!error.response) {
+      console.error("Network error - no response:", error.message);
+    } else if (status === 429) {
+      // Rate limit exceeded - add retry-after info to error
+      const retryAfter = error.response?.headers?.['retry-after'];
+      error.isRateLimit = true;
+      error.retryAfter = retryAfter;
+      // Don't retry automatically, let the component handle it with backoff
+    } else if (status === 401) {
+      tokenService.removeToken();
+      window.location.href = "/login";
+    } else if (status === 403) {
+      // Check if this is a lesson stream URL request - if so, don't redirect, let component handle it
+      if (config?.url && config.url.includes('/lessons/stream-url/')) {
+        return Promise.reject(error);
+      }
       window.location.href = "/unauthorized";
     } else if (status === 500) {
       console.error("Server error 500:", error.response?.data);

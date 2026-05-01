@@ -13,7 +13,8 @@ import {
   Phone,
   UserCheck,
   UserX,
-  Eye
+  Eye,
+  UserPlus
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,6 @@ import { Label } from "@/components/ui/label"
 import { adminService, type User } from "@/services/admin"
 import Layout from "@/components/Layout"
 import { useNavigate } from "react-router-dom"
-import { WithPermission } from "@/components/WithPermission"
 import { CanI } from "@/components/CanI"
 
 export default function AdminUsersPage() {
@@ -39,6 +39,16 @@ export default function AdminUsersPage() {
   const [filterStatus, setFilterStatus] = useState("")
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [newUser, setNewUser] = useState({
+    username: "",
+    email: "",
+    phone: "",
+    usercode: "",
+    role_id: 2,
+    account_status: "active"
+  })
+  const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -80,35 +90,63 @@ export default function AdminUsersPage() {
     }
   }
 
-   const handleDeleteUser = async (id: number) => {
-     if (!confirm("Are you sure you want to delete this user? This cannot be undone.")) return
+  const handleDeleteUser = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this user? This cannot be undone.")) return
 
-     setIsLoading(true)
-     try {
-       await adminService.deleteUser(id)
-       fetchUsers()
-       toast.success("User deleted successfully")
-     } catch (error) {
-       console.error("Failed to delete user:", error)
-       toast.error("Failed to delete user")
-     } finally {
-       setIsLoading(false)
-     }
-   }
+    setIsLoading(true)
+    try {
+      await adminService.deleteUser(id)
+      fetchUsers()
+      toast.success("User deleted successfully")
+    } catch (error) {
+      console.error("Failed to delete user:", error)
+      toast.error("Failed to delete user")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-   const handleViewUser = async (user: User) => {
-     setIsLoading(true)
-     try {
-       const userData = await adminService.getUser(user.id)
-       setSelectedUser(userData)
-       setIsViewModalOpen(true)
-     } catch (error) {
-       console.error("Failed to fetch user details:", error)
-       toast.error("Failed to load user details")
-     } finally {
-       setIsLoading(false)
-     }
-   }
+  const handleCreateUser = async () => {
+    if (!newUser.username || !newUser.email || !newUser.phone || !newUser.usercode) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+
+    setIsCreating(true)
+    try {
+      await adminService.createUser(newUser)
+      toast.success("User created successfully")
+      setIsCreateModalOpen(false)
+      setNewUser({
+        username: "",
+        email: "",
+        phone: "",
+        usercode: "",
+        role_id: 2,
+        account_status: "active"
+      })
+      fetchUsers()
+    } catch (error) {
+      console.error("Failed to create user:", error)
+      toast.error("Failed to create user")
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleViewUser = async (user: User) => {
+    setIsLoading(true)
+    try {
+      const userData = await adminService.getUser(user.id)
+      setSelectedUser(userData)
+      setIsViewModalOpen(true)
+    } catch (error) {
+      console.error("Failed to fetch user details:", error)
+      toast.error("Failed to load user details")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const filteredUsers = users.filter(u => 
     (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -167,23 +205,34 @@ export default function AdminUsersPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                className="bg-white text-slate-800 hover:bg-slate-100"
-                onClick={() => navigate("/admin")}
-              >
-                Back to Dashboard
-              </Button>
-              <Button 
-                variant="outline" 
-                className="bg-white text-slate-800 hover:bg-slate-100"
-                onClick={fetchUsers}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            </div>
+               <Button 
+                 variant="outline" 
+                 className="bg-white text-slate-800 hover:bg-slate-100"
+                 onClick={() => navigate("/admin")}
+               >
+                 Back to Dashboard
+               </Button>
+              <CanI action="add" resource="users">
+                  {can => can && (
+                    <Button 
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => setIsCreateModalOpen(true)}
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add User
+                    </Button>
+                  )}
+              </CanI>
+               <Button 
+                 variant="outline" 
+                 className="bg-white text-slate-800 hover:bg-slate-100"
+                 onClick={fetchUsers}
+                 disabled={isLoading}
+               >
+                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                 Refresh
+               </Button>
+             </div>
           </div>
         </div>
       </section>
@@ -456,6 +505,114 @@ export default function AdminUsersPage() {
                 onClick={() => setIsViewModalOpen(false)}
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Create New User</h3>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setIsCreateModalOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username *</Label>
+                <Input 
+                  id="username"
+                  value={newUser.username}
+                  onChange={(e) => setNewUser({...newUser, username: e.target.value})}
+                  placeholder="Enter username"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input 
+                  id="email"
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  placeholder="Enter email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone *</Label>
+                <Input 
+                  id="phone"
+                  value={newUser.phone}
+                  onChange={(e) => setNewUser({...newUser, phone: e.target.value})}
+                  placeholder="Enter phone number"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="usercode">Usercode *</Label>
+                <Input 
+                  id="usercode"
+                  type="password"
+                  value={newUser.usercode}
+                  onChange={(e) => setNewUser({...newUser, usercode: e.target.value})}
+                  placeholder="Enter usercode"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <select 
+                  id="role"
+                  className="w-full px-3 py-2 border rounded-md bg-background"
+                  value={newUser.role_id}
+                  onChange={(e) => setNewUser({...newUser, role_id: parseInt(e.target.value)})}
+                >
+                  <option value={2}>Subscriber</option>
+                  <option value={3}>Marketer</option>
+                  <option value={1}>Admin</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <select 
+                  id="status"
+                  className="w-full px-3 py-2 border rounded-md bg-background"
+                  value={newUser.account_status}
+                  onChange={(e) => setNewUser({...newUser, account_status: e.target.value})}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => setIsCreateModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateUser}
+                disabled={isCreating}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isCreating ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Create User
+                  </>
+                )}
               </Button>
             </div>
           </div>

@@ -5,7 +5,6 @@ import {
   Wallet, 
   Percent, 
   UserPlus, 
-  List, 
   RefreshCw, 
   Mail, 
   CheckCircle, 

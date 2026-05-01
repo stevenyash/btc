@@ -1,4 +1,4 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 type LessonTrackStatus = 'active' | 'expired' | 'exhausted' | 'cancelled';
 
@@ -35,10 +35,10 @@ class LessonTrack extends BaseModel<LessonTrackAttributes, LessonTrackCreationAt
 				total_lessons: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
 				package_id: { type: DataTypes.INTEGER, allowNull: false },
 				status: {
-					type: 'ENUM' as const, values: [],
-					allowNull: false,
-					defaultValue: 'active'
-				},
+				type: DataTypes.STRING,
+				allowNull: false,
+				defaultValue: 'active'
+			},
 				last_accessed: { type: DataTypes.DATE, allowNull: true },
 				expires_at: { type: DataTypes.DATE, allowNull: true }
 			},

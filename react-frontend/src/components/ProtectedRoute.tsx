@@ -9,7 +9,7 @@ import { Loader2 } from "lucide-react"
 interface ProtectedRouteProps {
   children: React.ReactNode
   requireAuth?: boolean
-  requireRole?: "subscriber" | "marketer" | "admin"
+  requireRole?: "subscriber" | "marketer" | "admin" | "superadmin"
   redirectTo?: string
 }
 
@@ -21,9 +21,9 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const location = useLocation()
   const { isAuthenticated, user, getCurrentUser, isLoading: authLoading } = useAuthStore()
-  const { fetchSubscriberDetails, isLoading: subLoading } = useSubscriptionStore()
-  const { fetchAllData: fetchMarketerData, isLoading: marketerLoading } = useMarketerStore()
-  const { fetchAllData: fetchAdminData, isLoading: adminLoading } = useAdminStore()
+   const { fetchSubscriberDetails } = useSubscriptionStore()
+   const { fetchAllData: fetchMarketerData } = useMarketerStore()
+   const { fetchAllData: fetchAdminData } = useAdminStore()
 
   // Check if user is authenticated (client-side check)
   const isAuth = isAuthenticated && user !== null
@@ -36,8 +36,8 @@ export function ProtectedRoute({
 
   // Fetch user data on mount if authenticated but details not loaded
   useEffect(() => {
-    if (isAuth && !user) {
-      getCurrentUser(true)
+    if (isAuth && !user?.role_name) {
+      getCurrentUser()
     }
   }, [isAuth, user, getCurrentUser])
 

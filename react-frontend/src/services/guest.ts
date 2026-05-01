@@ -1,22 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { publicApi } from "./api";
 
-export interface Grade {
-  id: number;
-  name: string;
-  level_id: number;
-}
-
 export interface LearningLevel {
   id: number;
   name: string;
   description?: string;
 }
 
+export interface Grade {
+  id: number;
+  name: string;
+  level_id: number;
+}
+
 export interface LearningArea {
   id: number;
   name: string;
-  grade_id: number;
+  color: string;
+  icon?: string;
+  description?: string;
 }
 
 export interface Lesson {
@@ -24,31 +26,40 @@ export interface Lesson {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
-  duration: number;
-  price: number;
+  duration: number | null;
+  duration_seconds: number | null;
   is_preview_available: boolean;
-}
-
-export interface GuestSession {
-  phone: string;
-  lesson_id: number;
-  watch_time: number;
-  max_watch_time: number;
-  expires_at: string;
+  bunny_url: string | null;
+  bunny_video_id: string | null;
+  price: number | null;
+  created_at: string;
+  video_url?: string;
+  hls_url?: string;
+  area_id: number;
+  grade_id: number;
+  topic_id?: number;
+  subtopic_id?: number;
 }
 
 export interface GuestPurchaseStatus {
   lesson_id: number;
   purchased: boolean;
-  watch_time?: number;
   max_watch_time?: number;
-  expires_at?: string;
+}
+
+export interface GuestRegisterResponse {
+  success: boolean;
+  message?: string;
+  is_new?: boolean;
+  verified?: boolean;
 }
 
 export interface StreamUrlResponse {
   success: boolean;
   message?: string;
   video_url?: string;
+  hls_url?: string;
+  is_hls?: boolean;
   session_expires?: string;
   lesson_balance?: number;
   title?: string;
@@ -62,29 +73,46 @@ export interface PaymentResponse {
 }
 
 export const guestService = {
+  async registerGuest(phone: string, username?: string): Promise<GuestRegisterResponse> {
+    const response = await publicApi.post("/components_data/register_guest", {
+      phone,
+      username,
+    });
+    return response.data;
+  },
+
   async getLevels(): Promise<LearningLevel[]> {
     const response = await publicApi.get("/components_data/learninglevels");
-    return response.data?.records || response.data || [];
+    const data = response.data?.data || response.data?.records || response.data || [];
+    const dataArray = Array.isArray(data) ? data : [];
+    return dataArray.map((item: { level_id: number; name: string; description?: string }) => ({
+      id: item.level_id,
+      name: item.name,
+      description: item.description
+    }));
   },
 
   async getGradesByLevel(levelId: number): Promise<Grade[]> {
     const response = await publicApi.get(`/components_data/grades_by_level/${levelId}`);
-    const data = response.data || [];
-    return data.map((item: { value: number; label: string }) => ({
-      id: item.value,
-      name: item.label,
+    const data = response.data?.data || response.data?.records || response.data || [];
+    const dataArray = Array.isArray(data) ? data : [];
+    return dataArray.map((item: { id: number; name: string }) => ({
+      id: item.id,
+      name: item.name,
       level_id: levelId
     }));
   },
 
   async getAreasByGrade(gradeId: number): Promise<LearningArea[]> {
     const response = await publicApi.get(`/components_data/learningareas?grade_id=${gradeId}`);
-    return response.data?.records || response.data || [];
+    const data = response.data?.data || response.data?.records || response.data || [];
+    return Array.isArray(data) ? data : [];
   },
 
   async getLessonsByArea(areaId: number): Promise<Lesson[]> {
     const response = await publicApi.get(`/components_data/lessons?area_id=${areaId}`);
-    return response.data?.records || response.data || [];
+    const data = response.data?.data || response.data?.records || response.data || [];
+    return Array.isArray(data) ? data : [];
   },
 
   async checkPurchaseStatus(phone: string, lessonId: number): Promise<GuestPurchaseStatus> {

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/card"
 import { Layout } from "@/components/Layout"
 import { useSubscriptionStore } from "@/stores/useSubscriptionStore"
-import { formatKenyanPhone, validateKenyanPhone } from "@/lib/utils"
+import { formatKenyanPhone } from "@/lib/utils"
 
 const paymentSchema = z.object({
   phone: z.string().min(10, "Please enter a valid Kenyan phone number"),
@@ -50,11 +50,10 @@ export default function SubscriptionCheckoutPage() {
     clearError
   } = useSubscriptionStore()
   
-  const [selectedPackage, setSelectedPackage] = useState<PackageInfo | null>(null)
-  const [paymentStep, setPaymentStep] = useState<"form" | "processing" | "success">("form")
-  const [checkoutRequestId, setCheckoutRequestId] = useState<string>("")
+   const [selectedPackage, setSelectedPackage] = useState<PackageInfo | null>(null)
+   const [paymentStep, setPaymentStep] = useState<"form" | "processing" | "success">("form")
 
-  const {
+   const {
     register,
     handleSubmit,
     formState: { errors },

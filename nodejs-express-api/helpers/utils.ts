@@ -40,6 +40,7 @@ interface Utils {
   usercodeHash: (usercodeText: string, hashType?: string) => string;
   usercodeVerify: (usercodeText: string, usercodeHash: string, hashType?: string) => boolean;
   excelAutoWidth: (worksheet: any, minimalWidth?: number) => void;
+  asString: (value: string | string[] | undefined | null) => string;
 }
 
 const utils: Utils = {
@@ -234,36 +235,35 @@ const utils: Utils = {
     return Math.floor(new Date().getTime() / 1000);
   },
 
+  asString(value: string | string[] | undefined | null): string {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) return value[0] || '';
+    return value;
+  },
+
   usercodeHash(usercodeText: string, hashType = 'bcrypt'): string {
-    if (hashType == 'bcrypt') {
+    if (hashType === 'bcrypt') {
       return bcrypt.hashSync(usercodeText, 10);
-    } else {
-      return crypto.createHash(hashType).update(usercodeText, 'utf8').digest('hex');
     }
+    return crypto.createHash('sha256').update(usercodeText).digest('hex');
   },
 
   usercodeVerify(usercodeText: string, usercodeHash: string, hashType = 'bcrypt'): boolean {
-    if (hashType == 'bcrypt') {
+    if (hashType === 'bcrypt') {
       return bcrypt.compareSync(usercodeText, usercodeHash);
-    } else {
-      const hash = crypto.createHash(hashType).update(usercodeText, 'utf8').digest('hex');
-      return usercodeHash == hash;
     }
+    const hash = crypto.createHash('sha256').update(usercodeText).digest('hex');
+    return hash === usercodeHash;
   },
 
   excelAutoWidth(worksheet: any, minimalWidth = 10): void {
+    if (!worksheet || !worksheet.columns) return;
     worksheet.columns.forEach((column: any) => {
-      let maxColumnLength = 0;
-      column.eachCell({ includeEmpty: true }, (cell: any) => {
-        maxColumnLength = Math.max(
-          maxColumnLength,
-          minimalWidth,
-          cell.value ? cell.value.toString().length : 0
-        );
-      });
-      column.width = maxColumnLength + 2;
+      if (column.key) {
+        column.width = Math.max(minimalWidth, (column.key.length || minimalWidth));
+      }
     });
-  },
-};
+  }
+}
 
 export default utils;

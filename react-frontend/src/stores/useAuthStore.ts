@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { authService, tokenService, type User, type LoginData, type RegisterData } from "@/services/auth";
+import { authService, tokenService, type User, type LoginData } from "@/services/auth";
 import { useSubscriptionStore } from "./useSubscriptionStore";
 
 interface AuthState {
@@ -11,13 +11,14 @@ interface AuthState {
   permissions: string[];
 
   login: (credentials: LoginData) => Promise<void>;
-  register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
-  getCurrentUser: () => Promise<void>;
+  getCurrentUser: (forceRefresh?: boolean) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearError: () => void;
   resetusercode: (token: string, usercode: string, confirmusercode: string) => Promise<void>;
   forgotusercode: (email: string) => Promise<void>;
+  changeUsercode: (currentUsercode: string, newUsercode: string, confirmUsercode: string) => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
   hasRole: (roleName: string) => boolean;
   hasPermission: (permission: string) => boolean;
 }
@@ -55,22 +56,6 @@ export const useAuthStore = create<AuthState>()(
           } else if (error instanceof Error) {
             message = error.message;
           }
-          set({
-            error: message,
-            isLoading: false,
-          });
-          throw error;
-        }
-      },
-
-      register: async (data) => {
-        set({ isLoading: true, error: null });
-        try {
-          const response = await authService.register(data);
-          set({ isLoading: false });
-          return response;
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Registration failed";
           set({
             error: message,
             isLoading: false,

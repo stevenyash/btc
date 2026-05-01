@@ -1,4 +1,4 @@
-import DB from '../models/db.ts';
+import DB from '../models/db.js';
 import { Optional, DataTypes } from "sequelize"; 
 class LearningHierarchyService {
 
@@ -7,7 +7,7 @@ class LearningHierarchyService {
 		try {
 			const levels = await DB.LearningLevels.findAll({
 				where: { is_active: true },
-				order: [['sort_order', 'ASC']],
+				order: [['name', 'ASC']],
 				raw: true
 			});
 			return levels;
@@ -35,7 +35,7 @@ class LearningHierarchyService {
 					level_id: levelId,
 					is_active: true
 				},
-				order: [['sort_order', 'ASC']],
+				order: [['name', 'ASC']],
 				raw: true
 			});
 			return grades;
@@ -91,12 +91,46 @@ class LearningHierarchyService {
 					area_id: areaId,
 					is_active: true
 				},
-				order: [['sort_order', 'ASC'], ['title', 'ASC']],
+				order: [['title', 'ASC']],
 				raw: true
 			});
 			return lessons;
 		} catch (error) {
 			console.error('Error getting lessons:', error);
+			throw error;
+		}
+	}
+
+	// Topics by Learning Area
+	async getTopicsByArea(areaId: number) {
+		try {
+			const topics = await DB.Topics.findAll({
+				where: {
+					area_id: areaId
+				},
+				order: [['topic_id', 'ASC']],
+				raw: true
+			});
+			return topics;
+		} catch (error) {
+			console.error('Error getting topics:', error);
+			throw error;
+		}
+	}
+
+	// Subtopics by Topic
+	async getSubtopicsByTopic(topicId: number) {
+		try {
+			const subtopics = await DB.Subtopics.findAll({
+				where: {
+					topic_id: topicId
+				},
+				order: [['subtopic_id', 'ASC']],
+				raw: true
+			});
+			return subtopics;
+		} catch (error) {
+			console.error('Error getting subtopics:', error);
 			throw error;
 		}
 	}
@@ -116,7 +150,7 @@ class LearningHierarchyService {
 		try {
 			const levels = await DB.LearningLevels.findAll({
 				where: { is_active: true },
-				order: [['sort_order', 'ASC']],
+				order: [['name', 'ASC']],
 				include: [
 					{
 						model: DB.Grades,
@@ -135,7 +169,7 @@ class LearningHierarchyService {
 										as: 'lessons',
 										where: { is_active: true },
 										required: false,
-										order: [['sort_order', 'ASC']]
+										order: [['title', 'ASC']]
 									}
 								]
 							}

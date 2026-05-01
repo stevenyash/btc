@@ -1,4 +1,4 @@
-import { api, publicApi, tokenService } from "./api";
+import { api, publicApi } from "./api";
 
 export interface SubscriptionDetails {
   id: number;
@@ -17,8 +17,12 @@ export interface PackageDetails {
   name: string;
   description: string;
   subscription_type_id: number;
-  subscription_type_name: string | null;
-  subscription_type_membership_fee: number | null;
+  // Flattened fields from joined subscription_type (raw: true)
+  'subscription_type.id'?: number;
+  'subscription_type.name'?: string;
+  'subscription_type.description'?: string;
+  'subscription_type.membership_fee'?: number | string;
+  'subscription_type.months'?: string;
   concurrent_access: number;
   no_of_lessons: number;
   duration_amount: number;
@@ -75,7 +79,7 @@ export interface SubscriptionService {
 
 export const subscriptionService: SubscriptionService = {
   async getSubscriberDetails(): Promise<SubscriberDetails> {
-    const response = await api.get("/components_data/subcriberdetails");
+    const response = await api.get("/components_data/subscriberdetails");
     return response.data;
   },
 
@@ -91,7 +95,11 @@ export const subscriptionService: SubscriptionService = {
 
   async getPackages(): Promise<PackageDetails[]> {
     const response = await publicApi.get("/components_data/packages_public");
-    return response.data;
+    const data = response.data?.data || response.data || [];
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    return data;
   },
 
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
@@ -110,7 +118,7 @@ export const subscriptionService: SubscriptionService = {
 
   async checkSubscription(): Promise<{ hasSubscription: boolean; data?: unknown }> {
     try {
-      const response = await api.get("/components_data/subcriberdetails");
+      const response = await api.get("/components_data/subscriberdetails");
       const details = response.data;
       
       if (details?.subscriptions?.status === 'active') {

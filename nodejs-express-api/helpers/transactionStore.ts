@@ -8,6 +8,7 @@ interface TransactionRecord {
   createdAt: Date;
   updatedAt: Date;
   transactionID?: string;
+  error?: string;
 }
 
 const transactionStore = new Map<string, TransactionRecord>();

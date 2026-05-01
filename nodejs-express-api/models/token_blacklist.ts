@@ -1,4 +1,4 @@
-import { BaseModel, sequelize, Op } from './basemodel';
+import { BaseModel, sequelize, Op } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 
 interface TokenBlacklistAttributes {

@@ -33,32 +33,23 @@ export default function AdminSubscriptionsPage() {
     fetchSubscriptions()
   }, [currentPage])
 
-  const fetchSubscriptions = async () => {
-    setIsLoading(true)
-    try {
-      const response = await adminService.getSubscriptionTypes(currentPage, 20)
-      const data = response.data
-      setSubscriptions(Array.isArray(data) ? data : [])
-      setTotal(response.total)
-      setTotalPages(Math.ceil(response.total / 20))
-    } catch (error) {
-      console.error("Failed to fetch subscriptions:", error)
-      toast.error("Failed to fetch subscription types")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+   const fetchSubscriptions = async () => {
+     setIsLoading(true)
+     try {
+       const response = await adminService.getSubscriptionTypes(currentPage, 20)
+       const data = response.data
+       setSubscriptions(Array.isArray(data) ? data : [])
+       setTotal(response.total)
+       setTotalPages(Math.ceil(response.total / 20))
+     } catch (error) {
+       console.error("Failed to fetch subscriptions:", error)
+       toast.error("Failed to fetch subscription types")
+     } finally {
+       setIsLoading(false)
+     }
+   }
 
-  const fetchSubscriptionTypes = async () => {
-    try {
-      const response = await adminService.getSubscriptionTypes(1, 100)
-      setSubscriptions(response.data || [])
-    } catch (error) {
-      console.error("Failed to fetch subscription types:", error)
-    }
-  }
-
-  const handleOpenModal = (sub?: SubscriptionType) => {
+   const handleOpenModal = (sub?: SubscriptionType) => {
     if (sub) {
       setEditingSubscription(sub)
       setFormData({

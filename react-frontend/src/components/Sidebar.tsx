@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import {
   Menu,
@@ -19,7 +19,6 @@ import {
   UserCheck,
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
   Users,
   CreditCard,
   FileSpreadsheet,

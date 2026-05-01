@@ -1,8 +1,6 @@
 import { api, tokenService } from "./api";
 export { api, tokenService };
 
-export type { User, LoginData, RegisterData, LoginResponse, LoginRequest };
-
 export interface User {
   id: string;
   username: string;
@@ -13,13 +11,6 @@ export interface User {
   role_name?: string;
   permissions?: string[];
   createdAt?: string;
-}
-
-export interface RegisterData {
-  username: string;
-  email: string;
-  phone: string;
-  usercode: string;
 }
 
 export interface LoginData {
@@ -38,11 +29,6 @@ export interface LoginResponse {
 }
 
 export const authService = {
-  register: async (data: RegisterData) => {
-    const response = await api.post("/auth/register", data);
-    return response.data;
-  },
-
   login: async (data: LoginData): Promise<LoginResponse> => {
     const loginRequest: LoginRequest = {
       username: data.identifier,

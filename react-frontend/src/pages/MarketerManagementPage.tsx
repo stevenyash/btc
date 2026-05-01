@@ -7,10 +7,8 @@ import {
   X,
   CheckCircle,
   XCircle,
-  DollarSign,
   UserPlus,
   Copy,
-  ArrowUpRight,
   Search
 } from "lucide-react"
 import { toast } from "sonner"

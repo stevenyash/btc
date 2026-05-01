@@ -15,11 +15,11 @@
     "allowSyntheticDefaultImports": true,
     "allowJs": true,
     "checkJs": false,
-    "noEmit": true,
+    "noEmit": false,
     "noImplicitThis": false,
     "strictNullChecks": false,
     "strictFunctionTypes": false,
-    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "ignoreDeprecations": "6.0"
   },
   "include": ["**/*.js", "**/*.ts"],

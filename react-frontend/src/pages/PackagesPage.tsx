@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Package, Clock, Users, ArrowRight, BookOpen, Video, Loader2, Gift, Zap, Calendar, X } from "lucide-react"
+import { Package, Clock, Users, ArrowRight, BookOpen, Video, Loader2, Gift, Zap, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Layout from "@/components/Layout"
+import { useAuthStore } from "@/stores/useAuthStore"
 import { useSubscriptionStore } from "@/stores/useSubscriptionStore"
 
 const iconColors = ["bg-green-500", "bg-blue-500", "bg-purple-500", "bg-orange-500", "bg-red-500", "bg-teal-500"]
@@ -19,30 +20,29 @@ function getColor(index: number) {
 
 export default function PackagesPage() {
   const navigate = useNavigate()
-  const { packages: apiPackages, isLoading, error, fetchPackages, isAuthorized, checkSubscription } = useSubscriptionStore()
-  const [showSubscribeModal, setShowSubscribeModal] = useState(false)
-  const [selectedPackageId, setSelectedPackageId] = useState<string>("")
+  const { user } = useAuthStore()
+  const { packages: apiPackages, isLoading, error, fetchPackages } = useSubscriptionStore()
 
   useEffect(() => {
     fetchPackages()
-    checkSubscription()
-  }, [fetchPackages, checkSubscription])
+  }, [fetchPackages])
 
   const handleBuyPackage = (packageId: string) => {
-    if (!isAuthorized) {
-      setSelectedPackageId(packageId)
-      setShowSubscribeModal(true)
+    if (!user) {
+      // Not logged in, redirect to login with return url
+      navigate(`/login?redirect=/packages/buy/${packageId}`)
       return
     }
+    // User is logged in, proceed to checkout
     navigate(`/packages/buy/${packageId}`)
   }
 
-  const groupedPackages = apiPackages.reduce<Record<string, typeof apiPackages>>((acc, pkg) => {
-    const key = pkg.subscription_type_name || "Other"
-    if (!acc[key]) acc[key] = []
-    acc[key].push(pkg)
-    return acc
-  }, {})
+   const groupedPackages = apiPackages.reduce<Record<string, typeof apiPackages>>((acc, pkg) => {
+     const key = pkg['subscription_type.name'] || "Other"
+     if (!acc[key]) acc[key] = []
+     acc[key].push(pkg)
+     return acc
+   }, {})
 
   const categoryNames = Object.keys(groupedPackages).sort((a, b) => {
     if (a === "Individual Subscription") return -1
@@ -228,38 +228,6 @@ export default function PackagesPage() {
           </Button>
         </div>
       </section>
-
-      {/* Subscribe Required Modal */}
-      {showSubscribeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="relative w-full max-w-md bg-background rounded-lg p-6 shadow-xl">
-            <button 
-              onClick={() => setShowSubscribeModal(false)}
-              className="absolute top-3 right-3 h-8 w-8 rounded-full hover:bg-muted flex items-center justify-center"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <div className="text-center">
-              <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="h-8 w-8 text-primary" />
-              </div>
-              <h2 className="text-xl font-bold mb-2">Subscription Required</h2>
-              <p className="text-muted-foreground mb-6">
-                You need an active subscription to purchase packages. Would you like to subscribe now?
-              </p>
-              <div className="space-y-3">
-                <Button className="w-full" onClick={() => { navigate("/subscriptions") }}>
-                  Subscribe Now
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-                <Button variant="outline" className="w-full" onClick={() => setShowSubscribeModal(false)}>
-                  Maybe Later
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </Layout>
   )
 }

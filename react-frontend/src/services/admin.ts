@@ -64,7 +64,10 @@ export interface User {
   email: string;
   phone?: string;
   role: string;
+  role_id?: number;
+  user_role_id?: number;
   status: string;
+  subscription_code?: string;
   created_at: string;
 }
 
@@ -101,25 +104,31 @@ export interface CreateMarketerData {
 }
 
 export interface Lesson {
-  id: number;
-  title: string;
-  description: string;
-  grade: string;
-  subject: string;
-  strand?: string;
-  video_url?: string;
-  video_key?: string;
-  s3_url?: string;
-  s3_key?: string;
-  thumbnail_url?: string;
-  duration_minutes?: number;
-  file_size_mb?: number;
-  file_type: string;
-  is_active?: boolean;
-  status: 'active' | 'inactive';
-  created_at: string;
-  updated_at: string;
-}
+   id: number;
+   title: string;
+   description: string;
+   grade: string;
+   subject: string;
+   strand?: string;
+   video_url?: string;
+   video_key?: string;
+   s3_url?: string;
+   s3_key?: string;
+   storage_path?: string | null;
+   bunny_url?: string | null;
+   bunny_video_id?: string | null;
+   video_guid?: string | null;
+   transcoding_status?: 'pending' | 'processing' | 'completed' | 'failed';
+   mp4_urls?: string | null;
+   thumbnail_url?: string;
+   duration_minutes?: number;
+   file_size_mb?: number;
+   file_type: string;
+   is_active?: boolean;
+   status: 'active' | 'inactive';
+   created_at: string;
+   updated_at: string;
+ }
 
 export interface Package {
   id: number;
@@ -156,18 +165,34 @@ export interface SubscriptionType {
 }
 
 export interface CreateLessonData {
-  title: string;
-  description: string;
-  grade: string;
-  subject: string;
-  strand?: string;
-  video_url?: string;
-  s3_url?: string;
-  s3_key?: string;
-  thumbnail_url?: string;
-  duration_minutes?: number;
-  status?: 'active' | 'inactive';
-  is_active?: boolean;
+   title: string;
+   description: string;
+   grade: string;
+   subject: string;
+   strand?: string;
+   video_url?: string;
+   s3_url?: string;
+   s3_key?: string;
+   storage_path?: string | null;
+   bunny_url?: string | null;
+   bunny_video_id?: string | null;
+   video_guid?: string | null;
+   transcoding_status?: 'pending' | 'processing' | 'completed' | 'failed';
+   mp4_urls?: string | null;
+   thumbnail_url?: string;
+   duration_minutes?: number;
+   status?: 'active' | 'inactive';
+   is_active?: boolean;
+ }
+
+export interface CreateUserData {
+  username: string;
+  email: string;
+  phone: string;
+  usercode: string;
+  role_id?: number;
+  role?: string;
+  account_status?: string;
 }
 
 export interface AdminService {
@@ -187,6 +212,7 @@ export interface AdminService {
   deleteSubscriptionType(id: number): Promise<void>;
    getUsers(page?: number, limit?: number, role?: string, status?: string): Promise<{ data: User[]; total: number }>;
    getUser(id: number): Promise<User>;
+   createUser(data: CreateUserData): Promise<User>;
    updateUser(id: number, data: Partial<User>): Promise<User>;
    deleteUser(id: number): Promise<void>;
   getTransactions(page?: number, limit?: number): Promise<{ data: RecentTransaction[]; total: number }>;
@@ -226,15 +252,25 @@ export interface AdminService {
   createTopic(data: any): Promise<any>;
   updateTopic(id: number, data: any): Promise<any>;
   deleteTopic(id: number): Promise<void>;
-  getAllSubtopics(): Promise<any[]>;
-  createSubtopic(data: any): Promise<any>;
-  updateSubtopic(id: number, data: any): Promise<any>;
-  deleteSubtopic(id: number): Promise<void>;
-}
+   getAllSubtopics(): Promise<any[]>;
+   createSubtopic(data: any): Promise<any>;
+   updateSubtopic(id: number, data: any): Promise<any>;
+   deleteSubtopic(id: number): Promise<void>;
+
+   // Marketer earnings
+   getCommissionSettings(): Promise<any>;
+   updateCommissionSettings(data: { default_commission_rate?: number; point_value?: number; min_withdrawal_amount?: number; min_points_redemption?: number; }): Promise<any>;
+   getMarketerCommissions(page?: number, limit?: number, status?: string): Promise<{ data: any[]; total: number }>;
+   updateMarketerCommission(id: number, data: { status: string }): Promise<any>;
+   getMarketerWithdrawals(page?: number, limit?: number, status?: string): Promise<{ data: any[]; total: number }>;
+   updateMarketerWithdrawal(id: number, data: { status: string; remarks?: string }): Promise<any>;
+   getMarketerRedemptions(page?: number, limit?: number, status?: string): Promise<{ data: any[]; total: number }>;
+   updateMarketerRedemption(id: number, data: { status: string; remarks?: string }): Promise<any>;
+ }
 
 export const adminService: AdminService = {
   async getStats(): Promise<AdminStats> {
-    const response = await api.get("/components_data/admin_stats");
+    const response = await api.get("/admin/stats");
     const data = response.data || {};
     return {
       totalUsers: data.total_users || 0,
@@ -248,13 +284,13 @@ export const adminService: AdminService = {
   },
 
   async getRecentUsers(limit: number = 5): Promise<RecentUser[]> {
-    const response = await api.get("/components_data/admin_recent_users");
+    const response = await api.get("/admin/recent-users");
     const data = response.data || [];
     return data.slice(0, limit);
   },
 
   async getRecentTransactions(limit: number = 5): Promise<RecentTransaction[]> {
-    const response = await api.get("/components_data/admin_recent_transactions");
+    const response = await api.get("/admin/recent-transactions");
     const data = response.data || [];
     return data.slice(0, limit);
   },
@@ -297,80 +333,97 @@ export const adminService: AdminService = {
     await api.get(`/packages/delete/${id}`);
   },
 
-  async getSubscriptionTypes(page: number = 1, limit: number = 20): Promise<{ data: SubscriptionType[]; total: number }> {
-     const response = await api.get("/components_data/admin_subscription_types", {
-      params: { page, limit }
-    });
-    return {
-      data: response.data?.data || response.data || [],
-      total: response.data?.total || 0
-    };
-  },
+   async getSubscriptionTypes(page?: number, limit?: number): Promise<any> {
+     // No arguments: return simple list for dropdowns
+     if (page === undefined && limit === undefined) {
+       const response = await api.get("/admin/subscription-types")
+       const types = (response.data?.data || response.data || []).map((t: any) => ({
+         id: t.id,
+         name: t.name
+       }))
+       return types
+     }
+     // With pagination: return paginated result
+     const pageNum = page ?? 1
+     const limitNum = limit ?? 20
+     const response = await api.get("/admin/subscription-types", {
+       params: { page: pageNum, limit: limitNum }
+     })
+      return {
+        data: response.data?.data || response.data || [],
+        total: response.data?.total || 0
+      }
+    },
 
-  async getSubscriptionType(id: number): Promise<SubscriptionType> {
-     const response = await api.get(`/components_data/admin_subscription_types/${id}`);
-    return response.data;
-  },
-
-  async createSubscriptionType(data: Omit<SubscriptionType, 'id' | 'created_at'>): Promise<SubscriptionType> {
-     const response = await api.post("/components_data/admin_subscription_types", data);
-    return response.data;
-  },
-
-  async updateSubscriptionType(id: number, data: Partial<SubscriptionType>): Promise<SubscriptionType> {
-     const response = await api.put(`/components_data/admin_subscription_types/${id}`, data);
-    return response.data;
-  },
-
-  async deleteSubscriptionType(id: number): Promise<void> {
-     await api.delete(`/components_data/admin_subscription_types/${id}`);
-  },
-
-   async getUsers(page: number = 1, limit: number = 20, role?: string, status?: string): Promise<{ data: User[]; total: number }> {
-     const response = await api.get("/components_data/admin_users", {
-       params: { page, limit, role, status }
-     });
-     return {
-       data: response.data?.users || response.data?.data || [],
-       total: response.data?.pagination?.total || response.data?.total || 0
-     };
-   },
-
-   async getUser(id: number): Promise<User> {
-     const response = await api.get(`/components_data/admin_users/${id}`);
+   async getSubscriptionType(id: number): Promise<SubscriptionType> {
+      const response = await api.get(`/admin/subscription-types/${id}`);
      return response.data;
    },
 
-   async updateUser(id: number, data: Partial<User>): Promise<User> {
-    const response = await api.put(`/components_data/admin_users/${id}`, data);
-    return response.data;
-  },
+   async createSubscriptionType(data: Omit<SubscriptionType, 'id' | 'created_at'>): Promise<SubscriptionType> {
+      const response = await api.post("/admin/subscription-types", data);
+     return response.data;
+   },
 
-  async deleteUser(id: number): Promise<void> {
-    await api.delete(`/components_data/admin_users/${id}`);
-  },
+   async updateSubscriptionType(id: number, data: Partial<SubscriptionType>): Promise<SubscriptionType> {
+      const response = await api.put(`/admin/subscription-types/${id}`, data);
+     return response.data;
+   },
 
-  async getTransactions(page: number = 1, limit: number = 20): Promise<{ data: RecentTransaction[]; total: number }> {
-    const response = await api.get("/components_data/admin_transactions", {
-      params: { page, limit }
-    });
-    return {
-      data: response.data?.data || response.data || [],
-      total: response.data?.total || 0
-    };
-  },
+   async deleteSubscriptionType(id: number): Promise<void> {
+      await api.delete(`/admin/subscription-types/${id}`);
+   },
 
-  async updateTransaction(id: number, data: Partial<RecentTransaction>): Promise<RecentTransaction> {
-    const response = await api.put(`/components_data/admin_transactions/${id}`, data);
-    return response.data;
-  },
+   async getUsers(page: number = 1, limit: number = 20, role?: string, status?: string): Promise<{ data: User[]; total: number }> {
+      const response = await api.get("/admin/users", {
+        params: { page, limit, role, status }
+      });
+      return {
+        data: response.data?.users || response.data?.data || [],
+        total: response.data?.pagination?.total || response.data?.total || 0
+      };
+    },
 
-  async deleteTransaction(id: number): Promise<void> {
-    await api.delete(`/components_data/admin_transactions/${id}`);
-  },
+    async getUser(id: number): Promise<User> {
+      const response = await api.get(`/admin/users/${id}`);
+      return response.data;
+    },
+
+    async createUser(data: CreateUserData): Promise<User> {
+      const response = await api.post("/users/add", data);
+      return response.data;
+    },
+
+    async updateUser(id: number, data: Partial<User>): Promise<User> {
+      const response = await api.put(`/admin/users/${id}`, data);
+      return response.data;
+    },
+
+    async deleteUser(id: number): Promise<void> {
+      await api.delete(`/admin/users/${id}`);
+    },
+
+   async getTransactions(page: number = 1, limit: number = 20): Promise<{ data: RecentTransaction[]; total: number }> {
+     const response = await api.get("/admin/transactions", {
+       params: { page, limit }
+     });
+     return {
+       data: response.data?.data || response.data || [],
+       total: response.data?.total || 0
+     };
+   },
+
+   async updateTransaction(id: number, data: Partial<RecentTransaction>): Promise<RecentTransaction> {
+     const response = await api.put(`/admin/transactions/${id}`, data);
+     return response.data;
+   },
+
+   async deleteTransaction(id: number): Promise<void> {
+     await api.delete(`/admin/transactions/${id}`);
+   },
 
   async getMarketers(page: number = 1, limit: number = 20): Promise<{ data: Marketer[]; total: number }> {
-    const response = await api.get("/components_data/admin_marketers", {
+    const response = await api.get("/admin/marketers", {
       params: { page, limit }
     });
     return {
@@ -380,26 +433,26 @@ export const adminService: AdminService = {
   },
 
   async createMarketer(data: CreateMarketerData): Promise<Marketer> {
-    const response = await api.post("/components_data/admin_marketers", data);
+    const response = await api.post("/admin/marketers", data);
     return response.data;
   },
 
   async updateMarketer(id: number, data: Partial<Marketer>): Promise<Marketer> {
-    const response = await api.put(`/components_data/admin_marketers/${id}`, data);
+    const response = await api.put(`/admin/marketers/${id}`, data);
     return response.data;
   },
 
   async deleteMarketer(id: number): Promise<void> {
-    await api.delete(`/components_data/admin_marketers/${id}`);
+    await api.delete(`/admin/marketers/${id}`);
   },
 
   async getAvailableUsersForMarketer(): Promise<RecentUser[]> {
-    const response = await api.get("/components_data/admin_users_available_for_marketer");
+    const response = await api.get("/admin/users-available-for-marketer");
     return response.data || [];
   },
 
   async getMarketerCommissions(page: number = 1, limit: number = 20, status?: string): Promise<{ data: any[]; total: number }> {
-    const response = await api.get("/components_data/admin_marketer_commissions", {
+    const response = await api.get("/admin/marketer-commissions", {
       params: { page, limit, status }
     });
     return {
@@ -409,12 +462,12 @@ export const adminService: AdminService = {
   },
 
   async updateMarketerCommission(id: number, data: { status: string }): Promise<any> {
-    const response = await api.put(`/components_data/admin_marketer_commissions/${id}`, data);
+    const response = await api.put(`/admin/marketer-commissions/${id}`, data);
     return response.data;
   },
 
   async getMarketerWithdrawals(page: number = 1, limit: number = 20, status?: string): Promise<{ data: any[]; total: number }> {
-    const response = await api.get("/components_data/admin_marketer_withdrawals", {
+    const response = await api.get("/admin/marketer-withdrawals", {
       params: { page, limit, status }
     });
     return {
@@ -424,12 +477,12 @@ export const adminService: AdminService = {
   },
 
   async updateMarketerWithdrawal(id: number, data: { status: string; remarks?: string }): Promise<any> {
-    const response = await api.put(`/components_data/admin_marketer_withdrawals/${id}`, data);
+    const response = await api.put(`/admin/marketer-withdrawals/${id}`, data);
     return response.data;
   },
 
   async getMarketerRedemptions(page: number = 1, limit: number = 20, status?: string): Promise<{ data: any[]; total: number }> {
-    const response = await api.get("/components_data/admin_marketer_redemptions", {
+    const response = await api.get("/admin/marketer-redemptions", {
       params: { page, limit, status }
     });
     return {
@@ -439,12 +492,12 @@ export const adminService: AdminService = {
   },
 
   async updateMarketerRedemption(id: number, data: { status: string; remarks?: string }): Promise<any> {
-    const response = await api.put(`/components_data/admin_marketer_redemptions/${id}`, data);
+    const response = await api.put(`/admin/marketer-redemptions/${id}`, data);
     return response.data;
   },
 
   async getCommissionSettings(): Promise<any> {
-    const response = await api.get("/components_data/admin_commission_settings");
+    const response = await api.get("/admin/commission-settings");
     return response.data;
   },
 
@@ -454,7 +507,7 @@ export const adminService: AdminService = {
     min_withdrawal_amount?: number;
     min_points_redemption?: number;
   }): Promise<any> {
-    const response = await api.put("/components_data/admin_commission_settings", data);
+    const response = await api.put("/admin/commission-settings", data);
     return response.data;
   },
 
@@ -520,20 +573,20 @@ export const adminService: AdminService = {
     return response.data;
   },
 
-  async uploadDirectToS3(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; key: string }> {
-    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
-    const { uploadUrl, fileUrl, key } = await this.getPresignedUploadUrl(fileName, file.type);
-    
-    await fetch(uploadUrl, {
-      method: "PUT",
-      body: file,
-      headers: {
-        "Content-Type": file.type,
-      },
-    });
-    
-    return { url: fileUrl, key };
-  },
+   async uploadDirectToS3(file: File, _onProgress?: (progress: number) => void): Promise<{ url: string; key: string }> {
+     const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+     const { uploadUrl, fileUrl, key } = await this.getPresignedUploadUrl(fileName, file.type);
+     
+     await fetch(uploadUrl, {
+       method: "PUT",
+       body: file,
+       headers: {
+         "Content-Type": file.type,
+       },
+     });
+     
+     return { url: fileUrl, key };
+   },
 
   async getGrades(): Promise<{ id: number; name: string }[]> {
     const response = await api.get("/admin/grades_option_list");

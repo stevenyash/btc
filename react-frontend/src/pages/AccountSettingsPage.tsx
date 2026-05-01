@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { User, Mail, Phone, Save, Loader2, CreditCard } from "lucide-react"
+import { User, Save, Loader2, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,8 +23,8 @@ type ProfileFormData = z.infer<typeof profileSchema>
 
 export default function AccountSettingsPage() {
   const navigate = useNavigate()
-  const { user, updateProfile, isLoading } = useAuthStore()
-  const { subscriberDetails, packages } = useSubscriptionStore()
+   const { user, updateProfile, isLoading } = useAuthStore()
+   const { packages } = useSubscriptionStore()
 
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)

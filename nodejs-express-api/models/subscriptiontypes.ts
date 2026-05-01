@@ -1,4 +1,4 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 interface SubscriptionTypesAttributes {
 	id: number;
@@ -51,6 +51,13 @@ class SubscriptionTypes extends BaseModel<SubscriptionTypesAttributes, Subscript
 			sequelize.literal("description LIKE :search"),
 			sequelize.literal("months LIKE :search")
 		];
+	}
+
+	static associate(models: any) {
+		this.hasMany(models.Packages, {
+			foreignKey: 'subscription_type_id',
+			as: 'packages'
+		});
 	}
 }
 

@@ -4,7 +4,6 @@ import {
   subscriptionService,
   type SubscriberDetails,
   type PackageDetails,
-  type MpesaPaymentRequest,
   type SubscriptionPlan,
 } from "@/services/subscription";
 import { useAuthStore } from "./useAuthStore";
@@ -34,8 +33,8 @@ interface SubscriptionState {
 }
 
 export const useSubscriptionStore = create<SubscriptionState>()(
-  persist(
-    (set, get) => ({
+   persist(
+     (set) => ({
       subscriberDetails: null,
       packages: [],
       subscriptionPlans: [],
@@ -69,23 +68,28 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             });
           }
 
-          if (!subscriptions || subscriptions.id === 0) {
-            set({
-              isAuthorized: false,
-              authMessage: "No active subscription found.",
-              hasActiveSubscription: false,
-            });
-          } else {
-            const expiryDate = subscriptions.expiry_date ? new Date(subscriptions.expiry_date) : null;
-            const isActive = expiryDate && expiryDate > new Date();
-            
-            set({
-              isAuthorized: isActive,
-              authMessage: isActive ? "" : "Subscription expired.",
-              hasActiveSubscription: isActive,
-              subscriptionStatus: isActive ? "active" : "expired",
-            });
+          // Store current package as array for compatibility
+          if (packages) {
+            set({ packages: [packages] });
           }
+
+           if (!subscriptions || subscriptions.id === 0) {
+             set({
+               isAuthorized: false,
+               authMessage: "No active subscription found.",
+               hasActiveSubscription: false,
+             });
+           } else {
+             const expiryDate = subscriptions.expiry_date ? new Date(subscriptions.expiry_date) : null;
+             const isActive = expiryDate ? expiryDate > new Date() : false;
+             
+             set({
+               isAuthorized: isActive,
+               authMessage: isActive ? "" : "Subscription expired.",
+               hasActiveSubscription: isActive,
+               subscriptionStatus: isActive ? "active" : "expired",
+             });
+           }
         } catch (error: unknown) {
           // Handle 401 - clear auth state
           if (error && typeof error === "object" && "response" in error) {
@@ -118,6 +122,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         set({ isLoading: true, error: null });
         try {
           const packages = await subscriptionService.getPackages();
+          console.log("packages",packages)
           set({ packages, isLoading: false });
         } catch (error: unknown) {
           const message =

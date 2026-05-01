@@ -1,11 +1,10 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 interface GradesAttributes {
 	id: number;
 	name: string;
 	description: string;
 	level_id: number;
-	sort_order: number;
 	is_active: boolean;
 }
 
@@ -22,7 +21,6 @@ class Grades extends BaseModel<GradesAttributes, GradesCreationAttributes> {
 				name: { type: DataTypes.STRING },
 				description: { type: DataTypes.STRING },
 				level_id: { type: DataTypes.INTEGER },
-				sort_order: { type: DataTypes.INTEGER, defaultValue: 0 },
 				is_active: { type: DataTypes.BOOLEAN, defaultValue: true }
 			},
 			{
@@ -34,15 +32,15 @@ class Grades extends BaseModel<GradesAttributes, GradesCreationAttributes> {
 	}
 
 	static listFields(): string[] {
-		return ['id', 'name', 'description', 'level_id', 'sort_order', 'is_active'];
+		return ['id', 'name', 'description', 'level_id', 'is_active'];
 	}
 
 	static viewFields(): string[] {
-		return ['id', 'name', 'description', 'level_id', 'sort_order', 'is_active'];
+		return ['id', 'name', 'description', 'level_id', 'is_active'];
 	}
 
 	static editFields(): string[] {
-		return ['id', 'name', 'description', 'level_id', 'sort_order', 'is_active'];
+		return ['id', 'name', 'description', 'level_id', 'is_active'];
 	}
 
 	static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {
@@ -69,5 +67,3 @@ class Grades extends BaseModel<GradesAttributes, GradesCreationAttributes> {
 Grades.initModel();
 
 export default Grades;
-
-

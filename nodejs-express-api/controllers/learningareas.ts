@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { body } from 'express-validator';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
+import DB from '../models/db.js';
 
 const router = Router();
 
@@ -24,7 +24,7 @@ router.get(['/', '/index/:fieldname?/:fieldvalue?'], async (req: Request, res: R
     query.raw = true;
     query.where = where;
     query.replacements = replacements;
-    query.order = DB.getOrderBy(req, 'learning_area_id', 'desc');
+    query.order = [['name', 'ASC']];
     query.attributes = DB.LearningAreas.listFields();
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -38,7 +38,7 @@ router.get('/view/:recid', async (req: Request, res: Response) => {
     const recid = req.params.recid || null;
     const query: any = {};
     const where: any = {};
-    where['learning_area_id'] = recid;
+    where['id'] = recid;
     query.raw = true;
     query.where = where;
     query.attributes = DB.LearningAreas.viewFields();
@@ -53,7 +53,7 @@ router.get('/edit/:recid', async (req: Request, res: Response) => {
     const recid = req.params.recid;
     const query: any = {};
     const where: any = {};
-    where['learning_area_id'] = recid;
+    where['id'] = recid;
     query.raw = true;
     query.where = where;
     query.attributes = DB.LearningAreas.editFields();
@@ -89,13 +89,13 @@ router.put('/edit/:recid', [
     const modeldata = (req as any).getValidFormData({ includeOptionals: true });
     const query: any = {};
     const where: any = {};
-    where['learning_area_id'] = recid;
+    where['id'] = recid;
     query.raw = true;
     query.where = where;
     query.attributes = DB.LearningAreas.editFields();
     const record = await DB.LearningAreas.findOne(query);
     if (!record) return res.status(404).json({ error: "Record not found" });
-    await DB.LearningAreas.update(modeldata, { where: { learning_area_id: recid } });
+    await DB.LearningAreas.update(modeldata, { where: { id: recid } });
     return res.json({ message: "Record updated" });
   } catch (err) { return res.status(500).json({ error: err instanceof Error ? err.message : String(err) }); }
 });
@@ -103,9 +103,11 @@ router.put('/edit/:recid', [
 router.delete('/delete/:recid', async (req: Request, res: Response) => {
   try {
     const recid = req.params.recid;
-    await DB.LearningAreas.destroy({ where: { learning_area_id: recid } });
+    await DB.LearningAreas.destroy({ where: { id: recid } });
     return res.json({ message: "Record deleted" });
-  } catch (err) { return res.status(500).json({ error: err instanceof Error ? err.message : String(err) }); }
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 router.get('/:areaId/lessons', async (req: Request, res: Response) => {
@@ -119,7 +121,7 @@ router.get('/:areaId/lessons', async (req: Request, res: Response) => {
     where['is_active'] = true;
     query.raw = true;
     query.where = where;
-    query.order = DB.getOrderBy(req, 'sort_order', 'asc');
+    query.order = [['title', 'ASC']];
     query.attributes = DB.Lessons.listFields();
     const result = await DB.Lessons.paginate(query, page, limit);
     return res.json(result);
@@ -127,4 +129,3 @@ router.get('/:areaId/lessons', async (req: Request, res: Response) => {
 });
 
 export default router;
-

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
+import DB from '../models/db.js';
+import utils from '../helpers/utils.js';
 import { body } from 'express-validator';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get(['/', '/index/:fieldname?/:fieldvalue?'], async (req: Request, res: R
     query.raw = true;
     query.where = where;
     query.replacements = replacements;
-    query.order = DB.getOrderBy(req, 'sort_order', 'asc');
+    query.order = [['name', 'ASC']];
     query.attributes = DB.LearningLevels.listFields();
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -66,7 +67,6 @@ router.get('/edit/:recid', async (req: Request, res: Response) => {
 router.post('/add', [
   body('name').optional({ nullable: true, checkFalsy: true }),
   body('description').optional({ nullable: true, checkFalsy: true }),
-  body('sort_order').optional({ nullable: true, checkFalsy: true }).isNumeric(),
 ], validateFormData as any, async (req: Request, res: Response) => {
   try {
     const modeldata = (req as any).getValidFormData();
@@ -78,7 +78,6 @@ router.post('/add', [
 router.post('/edit/:recid', [
   body('name').optional({ nullable: true, checkFalsy: true }),
   body('description').optional({ nullable: true, checkFalsy: true }),
-  body('sort_order').optional({ nullable: true, checkFalsy: true }).isNumeric(),
 ], validateFormData as any, async (req: Request, res: Response) => {
   try {
     const recid = req.params.recid;
@@ -98,7 +97,7 @@ router.post('/edit/:recid', [
 
 router.get('/delete/:recid', async (req: Request, res: Response) => {
   try {
-    const recid = (req.params.recid || '').split(',');
+    const recid = utils.asString(req.params.recid).split(',');
     const query: any = {};
     const where: any = {};
     where['level_id'] = recid;
@@ -113,7 +112,9 @@ router.get('/delete/:recid', async (req: Request, res: Response) => {
     }
     await DB.LearningLevels.destroy(query);
     return res.json(recid);
-  } catch (err) { return res.status(500).json({ error: err instanceof Error ? err.message : String(err) }); }
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 router.get('/:levelId/grades', async (req: Request, res: Response) => {
@@ -127,7 +128,7 @@ router.get('/:levelId/grades', async (req: Request, res: Response) => {
     where['is_active'] = true;
     query.raw = true;
     query.where = where;
-    query.order = DB.getOrderBy(req, 'sort_order', 'asc');
+    query.order = [['name', 'ASC']];
     query.attributes = DB.Grades.listFields();
     const result = await DB.Grades.paginate(query, page, limit);
     return res.json(result);
@@ -135,4 +136,3 @@ router.get('/:levelId/grades', async (req: Request, res: Response) => {
 });
 
 export default router;
-

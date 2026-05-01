@@ -31,7 +31,7 @@ export async function sendSms(Msisdn: string, msg: string): Promise<SmsResponse>
     console.log(response.data);
     return response.data;
   } catch (error) {
-    console.error('Error sending SMS:', (error as Error).response?.data || (error as Error).message);
+    console.error('Error sending SMS:', (error as any).response?.data || (error as Error).message);
     throw error;
   }
 }
@@ -44,7 +44,7 @@ export async function getBalance(): Promise<SmsResponse> {
     console.log(response.data);
     return response.data;
   } catch (error) {
-    console.error('Error getting balance:', (error as Error).response?.data || (error as Error).message);
+    console.error('Error getting balance:', (error as any).response?.data || (error as Error).message);
     throw error;
   }
 }

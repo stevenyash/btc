@@ -79,8 +79,8 @@ export default function WeekendTutorialsPage() {
 
   // State for purchased tutorials
   const [purchasedTutorials, setPurchasedTutorials] = useState<PurchasedTutorial[]>([])
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [questions, setQuestions] = useState<Question[]>([])
+   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   const [_questions, setQuestions] = useState<Question[]>([])
   const [showPurchased, setShowPurchased] = useState(false)
   const [purchasedLoading, setPurchasedLoading] = useState(false)
 
@@ -92,25 +92,26 @@ export default function WeekendTutorialsPage() {
 
   // Fee (will be fetched)
   const [fee, setFee] = useState("500")
-  const fetchLevels = async () => {
-    try {
-      const data = await apiService.get<Level[]>('/components_data/levelid_option_list')
-      setLevels(data as any)
-    } catch (error) {
-      console.error('Failed to fetch levels:', error)
-    }
-  }
+   const fetchLevels = async () => {
+     try {
+       const data = await apiService.get<Level[]>('/components_data/levelid_option_list')
+       setLevels(data)
+     } catch (error) {
+       console.error('Failed to fetch levels:', error)
+     }
+   }
 
-  const fetchGrades = async (levelId: number) => {
-    try {
-      const data = await apiService.get<Grade[]>(`/components_data/grades_by_level/${levelId}`)
-      setGrades(data as any)
-    } catch (error) {
-      console.error('Failed to fetch grades:', error)
-    }
-  }
+   const fetchGrades = async (levelId: number) => {
+     try {
+       const data = await apiService.get<{id: number, name: string}[]>(`/components_data/grades_by_level/${levelId}`)
+       setGrades(data.map(item => ({ value: item.id, label: item.name })))
+     } catch (error) {
+       console.error('Failed to fetch grades:', error)
+       setGrades([])
+     }
+   }
 
-  const fetchTutorials = async (gradeId: number) => {
+   const fetchTutorials = async (gradeId: number) => {
     setTutorialsLoading(true)
     try {
       const data = await apiService.get<{ success: boolean; data: Tutorial[]; total: number }>(
@@ -181,7 +182,7 @@ export default function WeekendTutorialsPage() {
     setEmail("")
   }
 
-  const onPaymentSuccess = async (transaction: { checkoutRequestID: string; transactionID?: string; amount: number; phoneNumber: string }) => {
+   const onPaymentSuccess = async (_transaction: { checkoutRequestID: string; transactionID?: string; amount: number; phoneNumber: string }) => {
     toast.success('Registration successful! Check your phone for SMS with class link.')
     setShowPaymentModal(false)
     setSelectedTutorial(null)

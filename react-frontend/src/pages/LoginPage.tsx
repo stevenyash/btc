@@ -1,4 +1,4 @@
-import { Link, useNavigate, useLocation } from "react-router-dom"
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -26,9 +26,11 @@ type LoginFormData = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { login, isLoading, error, clearError, hasRole } = useAuthStore()
 
-  const from = (location.state as { from?: Location })?.from?.pathname || "/dashboard"
+  const redirectFromQuery = searchParams.get("redirect")
+  const from = redirectFromQuery || (location.state as { from?: Location })?.from?.pathname || "/dashboard"
 
   const getRedirectPath = () => {
     if (hasRole("admin") || hasRole("superadmin")) return "/admin"

@@ -3,22 +3,18 @@ import {
   DollarSign,
   ArrowLeft,
   Clock,
-  CheckCircle,
-  XCircle,
   RefreshCw,
-  History,
   Wallet,
   TrendingUp,
   Gift
 } from "lucide-react"
-import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Layout from "@/components/Layout"
 import { useMarketerStore } from "@/stores/useMarketerStore"
 import { useNavigate } from "react-router-dom"
-import { marketerService, type MarketerCommission, type MarketerWithdrawal, type MarketerPointRedemption } from "@/services/marketer"
+import { marketerService, type MarketerWithdrawal, type MarketerPointRedemption } from "@/services/marketer"
 
 export default function MarketerEarningsPage() {
   const navigate = useNavigate()

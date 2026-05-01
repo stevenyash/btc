@@ -35,7 +35,7 @@ export default function ForgotUsercodePage() {
   const [step, setStep] = useState<"email" | "sent" | "reset">("email")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [resetToken, setResetToken] = useState<string>("")
+  const [resetToken, _setResetToken] = useState<string>("")
 
   const {
     register: registerEmail,

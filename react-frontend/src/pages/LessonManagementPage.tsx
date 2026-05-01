@@ -8,7 +8,6 @@ import {
   Trash2, 
   X,
   Upload,
-  Play,
   CheckCircle,
   XCircle,
   FileVideo,
@@ -25,7 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { adminService, awsConfig, type Lesson, type CreateLessonData } from "@/services/admin"
+import { adminService, type Lesson, type CreateLessonData } from "@/services/admin"
 import Layout from "@/components/Layout"
 import { useNavigate } from "react-router-dom"
 
@@ -603,30 +602,30 @@ export default function LessonManagementPage() {
                   </select>
                 </div>
 
-                <div className="col-span-2">
-                  <Label>Upload Video to AWS S3</Label>
-                  <div className="text-xs text-muted-foreground mb-2">
-                    Bucket: {awsConfig.bucket} | Region: {awsConfig.region}
-                  </div>
-                  <div 
-                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <input 
-                      ref={fileInputRef}
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Click to upload or drag and drop
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      MP4, MOV, AVI up to 500MB
-                    </p>
-                  </div>
+              <div className="col-span-2">
+                <Label>Upload Video to Bunny.net</Label>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Bunny.net Stream
+                </div>
+                <div 
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input 
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    MP4, MOV, AVI up to 500MB
+                  </p>
+                </div>
                   
                   {uploadProgress > 0 && uploadProgress < 100 && (
                     <div className="mt-3">
@@ -644,12 +643,12 @@ export default function LessonManagementPage() {
                 </div>
 
                 <div className="col-span-2">
-                  <Label htmlFor="video_url">Video URL (AWS S3)</Label>
+                  <Label htmlFor="video_url">Video URL (Bunny.net)</Label>
                   <Input 
                     id="video_url"
                     value={formData.video_url || ""}
                     onChange={(e) => setFormData(prev => ({ ...prev, video_url: e.target.value }))}
-                    placeholder="https://s3.amazonaws.com/bucket/lesson.mp4"
+                    placeholder="https://video.bunnycdn.com/lesson-id"
                   />
                 </div>
 
@@ -659,7 +658,7 @@ export default function LessonManagementPage() {
                     id="thumbnail_url"
                     value={formData.thumbnail_url || ""}
                     onChange={(e) => setFormData(prev => ({ ...prev, thumbnail_url: e.target.value }))}
-                    placeholder="https://s3.amazonaws.com/bucket/thumbnail.jpg"
+                    placeholder="https://video.bunnycdn.com/lesson-id/thumbnail/0.jpg"
                   />
                 </div>
               </div>

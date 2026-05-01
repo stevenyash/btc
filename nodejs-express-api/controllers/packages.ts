@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
+import DB from '../models/db.js';
+import utils from '../helpers/utils.js';
 import { body } from 'express-validator';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
 
 const router = Router();
 
@@ -52,7 +53,10 @@ router.get(['/', '/index/:fieldname?/:fieldvalue?'], async (req: Request, res: R
 
 router.get('/view/:recid', async (req: Request, res: Response) => {
   try {
-    const recid = req.params.recid || null;
+    const recid = parseInt(String(req.params.recid || ''), 10);
+    if (isNaN(recid)) {
+      return res.status(400).json({ error: 'Invalid ID' });
+    }
     const query: any = {};
     const where: any = {};
     where['id'] = recid;
@@ -146,7 +150,7 @@ router.post('/edit/:recid', [
 
 router.get('/delete/:recid', async (req: Request, res: Response) => {
   try {
-    const recid = (req.params.recid || '').split(',');
+    const recid = utils.asString(req.params.recid).split(',');
     const query: any = {};
     const where: any = {};
     where['id'] = recid;

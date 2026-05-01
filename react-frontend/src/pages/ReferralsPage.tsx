@@ -10,7 +10,6 @@ import {
   Mail,
   Phone,
   UserPlus,
-  Link,
   Copy,
   Share2,
   Users,
@@ -54,11 +53,13 @@ export default function ReferralsPage() {
   const fetchReferrals = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await api.get("/invites", {
-        page: currentPage,
-        limit: 20,
-        search: searchQuery || undefined
-      })
+       const response = await api.get("/invites", {
+         params: {
+           page: currentPage,
+           limit: 20,
+           search: searchQuery || undefined
+         }
+       })
       
       let referralsData: Referral[] = []
       let totalCount = 0

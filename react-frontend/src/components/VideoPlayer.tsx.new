@@ -1,0 +1,523 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import Hls from "hls.js";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Zap, Clock } from "lucide-react";
+import { api } from "@/services/api";
+import { guestService, type Lesson } from "@/services/guest";
+
+export interface VideoPlayerProps {
+  lesson: Lesson;
+  isSubscriber: boolean;
+  phone?: string | null;
+  userId?: string | number;
+  initialMaxWatchTime: number;
+  lessonBalance?: number;
+  onClose: () => void;
+}
+
+export function VideoPlayer({
+  lesson,
+  isSubscriber,
+  phone,
+  initialMaxWatchTime,
+  lessonBalance = 0,
+  onClose,
+}: VideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [isHlsStream, setIsHlsStream] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [availableQualities, setAvailableQualities] = useState<
+    Array<{ level: number; label: string; height: number; width: number }>
+  >([]);
+  const [selectedQuality, setSelectedQuality] = useState(-1);
+  const [maxWatchTime, setMaxWatchTime] = useState(initialMaxWatchTime);
+  const [refreshAttempted, setRefreshAttempted] = useState(false);
+  const refreshStreamUrlRef = useRef<(() => Promise<void>) | null>(null);
+  const initializeHlsRef = useRef<(videoUrl: string) => void | undefined>(undefined);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const errorRetryCount = useRef(0);
+  const maxRetries = 3;
+
+  const handleQualityChange = useCallback((level: number) => {
+    requestAnimationFrame(() => {
+      if (hlsRef.current) {
+        hlsRef.current.currentLevel = level;
+        setSelectedQuality(level);
+      }
+    });
+  }, []);
+
+  const cleanupHls = () => {
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy();
+      } catch (e) {
+        console.warn("Error destroying HLS instance:", e);
+      }
+      hlsRef.current = null;
+    }
+    errorRetryCount.current = 0;
+  };
+
+  const refreshStreamUrl = useCallback(async () => {
+    const currentStreamUrl = streamUrl;
+    if (!currentStreamUrl) return;
+    console.log("Refreshing stream URL...");
+    try {
+      let videoUrl: string;
+      let isHls: boolean;
+
+      if (isSubscriber) {
+        const response = await api.get(`/lessons/stream-url/${lesson.id}`, {
+          params: { signed: "true" },
+        });
+
+        if (response.data.success && response.data.video_url) {
+          videoUrl = response.data.video_url;
+          isHls = response.data.is_hls || videoUrl.includes(".m3u8");
+        } else {
+          toast.error("Failed to refresh video stream");
+          return;
+        }
+      } else {
+        if (!phone) {
+          toast.error("Phone number required");
+          return;
+        }
+        const result = await guestService.getStreamUrl(lesson.id, phone);
+        if (result.success && result.video_url) {
+          videoUrl = result.video_url;
+          isHls = result.is_hls || videoUrl.includes(".m3u8");
+          setMaxWatchTime(result.lesson_balance || 90 * 60);
+        } else {
+          toast.error(result.message || "Failed to refresh video stream");
+          return;
+        }
+      }
+
+      if (videoUrl !== currentStreamUrl) {
+        setStreamUrl(videoUrl);
+        setIsHlsStream(isHls);
+        setRefreshAttempted(false);
+
+        if (isHls) {
+          initializeHlsRef.current?.(videoUrl);
+        } else if (videoRef.current) {
+          videoRef.current.src = videoUrl;
+        }
+
+        toast.success("Video stream refreshed successfully");
+      }
+    } catch (error) {
+      console.error("Error refreshing video:", error);
+      toast.error("Failed to refresh video stream");
+    }
+  }, [lesson.id, isSubscriber, phone, streamUrl]);
+
+  useEffect(() => {
+    refreshStreamUrlRef.current = refreshStreamUrl;
+  }, [refreshStreamUrl]);
+
+  const initializeHls = useCallback((videoUrl: string) => {
+    if (!videoRef.current) return;
+
+    cleanupHls();
+    errorRetryCount.current = 0;
+
+    setAvailableQualities([]);
+    setSelectedQuality(-1);
+
+    if (videoUrl.includes(".m3u8") && Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        progressive: false,
+        fragLoadingTimeOut: 15000,
+        manifestLoadingTimeOut: 10000,
+        levelLoadingTimeOut: 10000,
+        fragLoadingMaxRetry: 3,
+        fragLoadingMaxRetryTimeout: 5000,
+        manifestLoadingMaxRetry: 3,
+        manifestLoadingMaxRetryTimeout: 5000,
+        autoStartLoad: false,
+        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferLength: 60,
+        backBufferLength: 10,
+      });
+
+      hls.loadSource(videoUrl);
+      hls.attachMedia(videoRef.current);
+
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.startLoad();
+      });
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        errorRetryCount.current = 0;
+        if (videoRef.current) {
+          requestAnimationFrame(() => {
+            videoRef.current!.play().catch((e) => {
+              if (e.name !== 'AbortError') {
+                console.warn("Playback failed to start:", e);
+              }
+            });
+          });
+        }
+      });
+
+      hls.on(Hls.Events.LEVELS_UPDATED, (_event: unknown, data: unknown) => {
+        const levelsData = data as {
+          levels?: Array<{ height?: number; width?: number }>;
+        };
+        const levels = (levelsData.levels || []).map((l, idx) => ({
+          level: idx,
+          label: l.height
+            ? `${l.height}p`
+            : l.width
+            ? `${l.width}p`
+            : `Level ${idx}`,
+          height: l.height || 0,
+          width: l.width || 0,
+        }));
+        setAvailableQualities(levels);
+        if (levels.length > 0) {
+          const highest = Math.min(levels.length - 1, 2);
+          setSelectedQuality(highest);
+          hls.currentLevel = highest;
+        }
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event: unknown, data: unknown) => {
+        const switched = data as { level: number };
+        setSelectedQuality(switched.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_event: unknown, data: unknown) => {
+        const err = data as {
+          fatal: boolean;
+          type: string;
+          details: string;
+          url?: string;
+          response?: { code?: number };
+        };
+
+        const is403Error = err.response?.code === 403 || 
+          (err.url && err.details?.includes('403'));
+        const isLikelyAuthError = (err.url &&
+          (err.url.includes(".m3u8") || err.url.includes(".ts")) &&
+          (is403Error || !err.fatal));
+
+        if (err.fatal) {
+          switch (err.type) {
+            case "networkError":
+              if (is403Error && errorRetryCount.current < maxRetries) {
+                errorRetryCount.current++;
+                setTimeout(() => {
+                  refreshStreamUrlRef.current?.();
+                }, 1000 * errorRetryCount.current);
+              } else {
+                if (errorRetryCount.current < maxRetries) {
+                  errorRetryCount.current++;
+                  setTimeout(() => hls.startLoad(), 2000 * errorRetryCount.current);
+                } else {
+                  toast.error("Network error. Please check your connection.");
+                }
+              }
+              break;
+            case "mediaError":
+              if (errorRetryCount.current < maxRetries) {
+                errorRetryCount.current++;
+                hls.recoverMediaError();
+              } else {
+                if (hlsRef.current) {
+                  try { hlsRef.current.destroy(); } catch(e) {}
+                  hlsRef.current = null;
+                }
+                errorRetryCount.current = 0;
+              }
+              break;
+            default:
+              if (hlsRef.current) {
+                try { hlsRef.current.destroy(); } catch(e) {}
+                hlsRef.current = null;
+              }
+              errorRetryCount.current = 0;
+              break;
+          }
+        } else if (isLikelyAuthError || is403Error) {
+          console.warn("Auth error detected, attempting to refresh stream URL...", err);
+          if (errorRetryCount.current < maxRetries) {
+            errorRetryCount.current++;
+            setTimeout(() => {
+              refreshStreamUrlRef.current?.();
+            }, 1000 * errorRetryCount.current);
+          } else {
+            console.error("Stream URL refresh failed after retries");
+            toast.error("Video stream expired. Please reload the page.");
+            if (hlsRef.current) {
+              try { hlsRef.current.destroy(); } catch(e) {}
+              hlsRef.current = null;
+            }
+            errorRetryCount.current = 0;
+          }
+        } else {
+          switch (err.details) {
+            case "levelLoadError":
+            case "fragmentLoadError":
+            case "audioTrackLoadError":
+            case "keySystemError":
+              if (errorRetryCount.current < maxRetries) {
+                errorRetryCount.current++;
+                hls.recoverMediaError();
+              } else {
+                if (hlsRef.current) {
+                  try { hlsRef.current.destroy(); } catch(e) {}
+                  hlsRef.current = null;
+                }
+                errorRetryCount.current = 0;
+              }
+              break;
+            default:
+              setTimeout(() => {
+                if (errorRetryCount.current < maxRetries) {
+                  errorRetryCount.current++;
+                  hls.recoverMediaError();
+                }
+              }, 1000);
+          }
+        }
+      });
+
+      hlsRef.current = hls;
+    } else if (videoRef.current.canPlayType("application/vnd.apple.mpegurl")) {
+      videoRef.current.src = videoUrl;
+    }
+  }, [maxRetries, refreshStreamUrlRef]);
+
+  useEffect(() => {
+    initializeHlsRef.current = initializeHls;
+  }, [initializeHls]);
+
+  useEffect(() => {
+    const fetchStreamUrl = async () => {
+      setIsLoading(true);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+      
+      try {
+        let videoUrl: string;
+        let isHls: boolean;
+
+        if (isSubscriber) {
+          const response = await api.get(`/lessons/stream-url/${lesson.id}`, {
+            params: { signed: "true" },
+            signal: abortControllerRef.current.signal,
+          });
+
+          if (response.data.success && response.data.video_url) {
+            videoUrl = response.data.video_url;
+            isHls = response.data.is_hls || videoUrl.includes(".m3u8");
+          } else {
+            toast.error("Failed to load video");
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          if (!phone) {
+            toast.error("Phone number required");
+            setIsLoading(false);
+            return;
+          }
+          const result = await guestService.getStreamUrl(lesson.id, phone);
+          if (result.success && result.video_url) {
+            videoUrl = result.video_url;
+            isHls = result.is_hls || videoUrl.includes(".m3u8");
+            setMaxWatchTime(result.lesson_balance || 90 * 60);
+          } else {
+            toast.error(result.message || "Failed to load video");
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        setStreamUrl(videoUrl);
+        setIsHlsStream(isHls);
+        setRefreshAttempted(false);
+
+        if (isHls) {
+          initializeHls(videoUrl);
+        } else if (videoRef.current) {
+          videoRef.current.src = videoUrl;
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error("Error loading video:", error);
+          toast.error("Failed to load video");
+        }
+      } finally {
+        if (!abortControllerRef.current?.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchStreamUrl();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      cleanupHls();
+    };
+  }, [lesson.id, isSubscriber, phone, initializeHls, cleanupHls, refreshStreamUrl]);
+
+  const closeVideo = useCallback(() => {
+    cleanupHls();
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      } catch (e) {
+        console.warn("Error cleaning up video element:", e);
+      }
+    }
+    onClose();
+  }, [onClose, cleanupHls]);
+
+  useEffect(() => {
+    return () => {
+      cleanupHls();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [cleanupHls]);
+
+  const remainingTime = Math.max(0, maxWatchTime);
+  const progressPercent = maxWatchTime > 0 ? (remainingTime / maxWatchTime) * 100 : 0;
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white">Loading video...</div>
+      </div>
+    );
+  }
+
+  if (!streamUrl) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-black">
+      <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+        <Button
+          variant="ghost"
+          onClick={closeVideo}
+          className="text-white hover:bg-slate-800"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Lessons
+        </Button>
+
+        {isSubscriber ? (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-400" />
+              <span className="text-sm">
+                {formatTime(remainingTime)} remaining ({lessonBalance} credits)
+              </span>
+            </div>
+            <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-yellow-400 transition-all"
+                style={{
+                  width: remainingTime > 0 ? `${progressPercent}%` : "0%",
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-yellow-400" />
+              <span className="text-sm">{formatTime(remainingTime)} remaining</span>
+            </div>
+            <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-yellow-400 transition-all"
+                style={{ width: `${100 - progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {isHlsStream && availableQualities.length > 1 && (
+        <div className="flex items-center justify-center gap-2 py-3">
+          <span className="text-sm text-slate-400">Quality:</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => handleQualityChange(-1)}
+              className={
+                "px-3 py-1 text-sm rounded " +
+                (selectedQuality === -1
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600")
+              }
+            >
+              Auto
+            </button>
+            {availableQualities.map((q) => (
+              <button
+                key={q.level}
+                onClick={() => handleQualityChange(q.level)}
+                className={
+                  "px-3 py-1 text-sm rounded " +
+                  (selectedQuality === q.level
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-700 text-slate-300 hover:bg-slate-600")
+                }
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="aspect-video bg-black max-w-5xl mx-auto">
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          controls
+          controlsList="nodownload nofullscreen"
+          disablePictureInPicture
+          playsInline
+          autoPlay
+          crossOrigin="use-credentials"
+        />
+      </div>
+
+      <div className="max-w-5xl mx-auto p-4">
+        <h2 className="text-xl font-bold text-white">{lesson.title}</h2>
+        <p className="text-slate-400">{lesson.description || "No description"}</p>
+      </div>
+    </div>
+  );
+}
+
+export default VideoPlayer;

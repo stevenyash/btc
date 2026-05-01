@@ -1,15 +1,62 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { body } from 'express-validator';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
+import DB from '../models/db.js';
 import uploader from '../helpers/uploader.js';
-import bunnyVideoDelivery from '../services/bunnyVideoDelivery.js';
-import { validateLessonAccess, validateLessonCreate, validateLessonUpdate } from '../middleware/validationMiddleware.js';
+import BunnyHelper from '../helpers/bunnyHelper.js';
+import bunnyService from '../services/bunnyService.js';
+import { validateLessonAccess, canStreamLesson } from '../middleware/validateLessonAccess.js';
 import { streamLimiter, generalLimiter, uploadLimiter } from '../middleware/rateLimiters.js';
-import config from '../config/lessons.js';
 import jwt from 'jsonwebtoken';
+import utils from '../helpers/utils.js';
 
 const router = Router();
+
+// Log video access endpoint
+router.post('/log-access/:recid', async (req: Request, res: Response) => {
+    try {
+      const { recid } = req.params;
+      const { watch_time, completion_percentage } = req.body;
+      const userId = req.user?.id?.toString() || req.body.user_id || 'guest';
+
+      // Note: logAccess method is specific to bunnyService and not abstracted in BunnyHelper
+      // Keeping direct call for this specialized logging functionality
+      bunnyService.logAccess({
+        videoKey: `lesson_${recid}`,
+        userId,
+        lessonId: String(recid),
+        action: 'stream',
+        timestamp: new Date().toISOString(),
+        ip: req.ip || req.socket.remoteAddress || 'unknown',
+        userAgent: req.get('user-agent') || 'unknown',
+      });
+
+      // Update lesson access log with watch time if provided
+      if (watch_time !== undefined) {
+        await DB.LessonAccessLogs.update(
+          {
+            watch_time,
+            completion_percentage,
+            status: completion_percentage >= 100 ? 'completed' : 'active',
+            completed_at: completion_percentage >= 100 ? new Date() : null,
+          },
+          {
+            where: {
+              lesson_id: recid,
+              status: 'active',
+            },
+            order: [['accessed_at', 'DESC']],
+            limit: 1,
+          }
+        );
+      }
+
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error logging access:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
 
 router.use(generalLimiter);
 
@@ -38,36 +85,35 @@ async function beforeAdd(postdata: any, req: any) {
 }
 
 async function afterAdd(record: any, req: any) {
-  try {
-    console.log('Starting afterAdd - lesson:', record.id);
-    if (record.file) {
-      const options = {
-        title: record.title || 'Untitled Lesson',
-        description: record.description || '',
-        visibility: record.is_preview_available ? 'public' : 'private'
-      };
-      
-      const uploadResult = await bunnyVideoDelivery.uploadVideo(
+   try {
+     console.log('Starting afterAdd - lesson:', record.id);
+     if (record.file) {
+      const uploadResult = await BunnyHelper.handleVideoUpload(
         record.file,
-        record.filename || `lesson_${record.id}.mp4`,
-        options
-      );
-
-      await DB.Lessons.update(
         {
-          s3_key: uploadResult.key,
-          s3_url: uploadResult.url,
-          file_size: uploadResult.size
+          title: record.title || 'Untitled Lesson',
+          useStream: true,
         },
-        { where: { id: record.id } }
+        (filePath) => uploader.deleteRecordFiles(filePath, 'file')
       );
 
-      uploader.deleteRecordFiles(record.file, 'file');
-    }
-  } catch (error: any) {
-    console.error('Error in afterAdd:', error.message);
-  }
-}
+      const updateData: any = {
+        storage_path: uploadResult.data.storagePath,
+        bunny_url: uploadResult.data.url,
+        file_size: uploadResult.data.size,
+      };
+
+      if (uploadResult.data.videoId) {
+        updateData.bunny_video_id = uploadResult.data.videoId;
+        updateData.transcoding_status = uploadResult.data.status || 'processing';
+      }
+
+      await DB.Lessons.update(updateData, { where: { id: record.id } });
+     }
+   } catch (error: any) {
+     console.error('Error in afterAdd:', error.message);
+   }
+ }
 
 router.get(['/', '/index/:fieldname?/:fieldvalue?'], async (req: Request, res: Response) => {
   try {
@@ -111,89 +157,161 @@ router.get(['/', '/index/:fieldname?/:fieldvalue?'], async (req: Request, res: R
 });
 
 router.get('/view/:recid', async (req: Request, res: Response) => {
-  try {
-    const recid = req.params.recid || null;
-    const query: any = {};
-    const where: any = {};
+   try {
+     const recid = req.params.recid || null;
+     const query: any = {};
+     const where: any = {};
 
-    where['id'] = recid;
-    query.raw = true;
-    query.where = where;
-    query.attributes = DB.Lessons.viewFields();
+     where['id'] = recid;
+     query.raw = false;
+     query.where = where;
+     query.attributes = DB.Lessons.viewFields();
 
-    const record: any = await DB.Lessons.findOne(query);
-    if (!record) {
-      return res.status(404).json({ error: "Record not found" });
-    }
+     const record: any = await DB.Lessons.findOne(query);
+     if (!record) {
+       return res.status(404).json({ error: "Record not found" });
+     }
 
-    if (record.s3_key) {
-      record.dataValues.video_url = bunnyVideoDelivery.generatePublicUrl(record.s3_key);
-    }
+     const recordData = record.toJSON();
+     const videoId = recordData.bunny_video_id;
+     const storagePath = recordData.storage_path || recordData.s3_key;
 
-    return res.json(record);
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
+     if (videoId) {
+       // Use BunnyHelper for secure URLs (though view endpoint might not need security)
+       const videoResult = BunnyHelper.getSecureVideoUrl(videoId, {}, false);
+       const hlsResult = BunnyHelper.getSecureVideoUrl(videoId, {}, true);
+       
+       recordData.video_url = videoResult.url;
+       recordData.hls_url = hlsResult.url;
+     } else if (storagePath) {
+       const storageResult = BunnyHelper.getSecureStorageUrl(storagePath);
+       recordData.video_url = storageResult.url;
+     }
 
-router.get('/stream-url/:recid', streamLimiter, validateLessonAccess, async (req: Request, res: Response) => {
-  try {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+     return res.json(recordData);
+   } catch (err) {
+     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+   }
+ });
 
-    const recid = req.params.recid;
-    const { expiresIn = 3600 } = req.query;
+router.get('/stream-url/:recid', streamLimiter, validateLessonAccess, async (req: Request, res: Response, next: NextFunction) => {
+   try {
+     console.log('[DEBUG] /stream-url handler - req.user:', (req as any).user, 'lessonAccess:', (req as any).lessonAccess);
+     
+     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+     res.setHeader('Pragma', 'no-cache');
+     res.setHeader('Expires', '0');
 
-    const record: any = await DB.Lessons.findOne({
-      where: { id: recid },
-      include: [
-        { model: DB.LearningAreas, as: 'learning_area', attributes: ['id', 'name'] },
-        { model: DB.Topics, as: 'topic', attributes: ['topic_id', 'name'] },
-        { model: DB.Subtopics, as: 'subtopic', attributes: ['subtopic_id', 'name'] }
-      ]
-    });
+     const recid = req.params.recid;
+     const { expiresIn = 3600 } = req.query;
 
-    if (!record) {
-      return res.status(404).json({ error: 'Lesson not found' });
-    }
+     const record: any = await DB.Lessons.findOne({
+       where: { id: recid },
+       include: [
+         { model: DB.LearningAreas, as: 'learning_area', attributes: ['id', 'name'] },
+         { model: DB.Topics, as: 'topic', attributes: ['topic_id', 'name'] },
+         { model: DB.Subtopics, as: 'subtopic', attributes: ['subtopic_id', 'name'] }
+       ]
+     });
 
-    if (!record.s3_key) {
-      return res.status(400).json({ error: 'Lesson video not available' });
-    }
+     if (!record) {
+       return res.status(404).json({ error: 'Lesson not found' });
+     }
 
-    const user_id = req.user?.id || req.query.user_id;
-    const expiresInNum = parseInt(expiresIn as string);
+     const recordData = record.toJSON();
+     const videoId = recordData.bunny_video_id;
+     const storagePath = recordData.storage_path || recordData.s3_key;
 
-    const secureData = bunnyVideoDelivery.generateSecureUrl(
-      record.s3_key,
-      user_id?.toString() || 'guest',
-      recid,
-      {
-        expiresIn: expiresInNum,
-        disableDownload: true,
-        maxPlays: 3
+     if (!videoId && !storagePath) {
+       return res.status(400).json({ error: 'Lesson video not available' });
+     }
+
+      const user_id = req.user?.id?.toString() || req.query.user_id || 'guest';
+      const expiresInNum = parseInt(expiresIn as string);
+      // Extract client IP, but skip IP binding for localhost/private IPs
+      const rawClientIp = req.ip || req.socket.remoteAddress || undefined;
+      // Only use IP for token if it's a public IP (not localhost/private)
+      const isLocalOrPrivate = rawClientIp === '::1' || 
+                               rawClientIp === '127.0.0.1' ||
+                               rawClientIp?.startsWith('192.168.') ||
+                               rawClientIp?.startsWith('10.') ||
+                               rawClientIp?.startsWith('172.');
+      const clientIp = isLocalOrPrivate ? undefined : rawClientIp;
+
+     let videoUrl: string;
+     let isHls = false;
+     let hlsUrl: string | null = null;
+
+      if (videoId) {
+       // Use BunnyHelper for secure HLS URL with directory token for segment inheritance
+       const hlsResult = BunnyHelper.getSecureVideoUrl(videoId, {
+         expiresIn: expiresInNum,
+         userIp: clientIp
+       }, true);
+       
+       videoUrl = hlsResult.url;
+       hlsUrl = hlsResult.hlsUrl;
+       isHls = true;
+       
+       console.log('[DEBUG] HLS video - videoId:', videoId, 'hlsUrl:', hlsUrl, 'token:', hlsResult.token ? 'generated' : 'not configured');
+      } else {
+        // For storage-based videos, use BunnyHelper for secure URL
+        const storageResult = BunnyHelper.getSecureStorageUrl(storagePath, {
+          expiresIn: expiresInNum
+        });
+        
+        videoUrl = storageResult.url;
+        console.log('[DEBUG] Non-HLS video - storagePath:', storagePath, 'videoUrl:', videoUrl);
+       }
+
+      let lesson_balance: number | undefined = undefined;
+      if (!req.user) {
+        const setting = await DB.LessonSetting.findOne({
+          where: { subscription_type: 'non_subscribed' },
+          attributes: ['duration']
+        });
+        // duration is stored as string, convert to number of minutes, then *60 for seconds
+        const durationMinutes = setting ? Number(setting.duration) : 90; // fallback 90 min
+        lesson_balance = durationMinutes * 60;
+        console.log('[DEBUG] Guest lesson_balance computed:', lesson_balance, 'from duration:', durationMinutes);
+      } else {
+        // For subscribers, check if they have lesson balance (from lesson_track)
+        const lessonTrack = await DB.LessonTrack.findOne({
+          where: { 
+            user_id: req.user.id,
+            status: 'active'
+          }
+        });
+        if (lessonTrack && lessonTrack.lesson_balance && lessonTrack.lesson_balance > 0) {
+          // Each credit = 90 minutes of watch time
+          lesson_balance = lessonTrack.lesson_balance * 90 * 60;
+          console.log('[DEBUG] Subscriber lesson_balance:', lesson_balance, 'from balance:', lessonTrack.lesson_balance);
+        } else {
+          console.log('[DEBUG] Subscriber has no lesson balance');
+        }
       }
-    );
 
-    return res.json({
-      success: true,
-      video_url: secureData.signedUrl,
-      is_hls: false,
-      thumbnail_url: record.thumbnail_url,
-      title: record.title,
-      duration: record.duration,
-      area: record.learning_area?.name,
-      topic: record.topic?.name,
-      subtopic: record.subtopic?.name,
-      expires_in: expiresInNum,
-      security: secureData.security
-    });
-  } catch (err) {
-    console.error('Error in stream-url:', err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
+      console.log('[DEBUG] Returning response - video_url:', videoUrl, 'is_hls:', isHls, 'lesson_balance:', lesson_balance);
+
+      return res.json({
+        success: true,
+        video_url: videoUrl,
+        is_hls: isHls,
+        hls_url: videoId ? hlsUrl : null,
+        thumbnail_url: recordData.thumbnail_url,
+        title: recordData.title,
+        duration: recordData.duration,
+        area: recordData.learning_area?.name,
+        topic: recordData.topic?.name,
+        subtopic: recordData.subtopic?.name,
+        expires_in: expiresInNum,
+        lesson_balance,
+      });
+   } catch (err) {
+     console.error('Error in stream-url:', err);
+     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+   }
+ });
 
 router.post('/edit/:recid', [
   body('title').optional({ nullable: true, checkFalsy: true }),
@@ -205,46 +323,53 @@ router.post('/edit/:recid', [
     const recid = req.params.recid;
     const modeldata = (req as any).getValidFormData({ includeOptionals: true });
 
-    if (modeldata.file !== undefined) {
-      const fileInfo = uploader.moveUploadedFiles(modeldata.file, 'file');
-      modeldata.file = fileInfo.filepath;
-      modeldata.filename = fileInfo.filename;
+     if (modeldata.file !== undefined) {
+       const fileInfo = uploader.moveUploadedFiles(modeldata.file, 'file');
+       modeldata.file = fileInfo.filepath;
+       modeldata.filename = fileInfo.filename;
 
-      const options = {
-        title: modeldata.title || 'Untitled Lesson',
-        description: modeldata.description || '',
-        visibility: modeldata.is_preview_available ? 'public' : 'private'
-      };
+       const uploadResult = await BunnyHelper.handleVideoUpload(
+         modeldata.file,
+         {
+           title: modeldata.title || 'Untitled Lesson',
+           useStream: true,
+         },
+         (filePath) => uploader.deleteRecordFiles(filePath, 'file')
+       );
 
-      const uploadResult = await bunnyVideoDelivery.uploadVideo(
-        modeldata.file,
-        modeldata.filename,
-        options
-      );
+        if (uploadResult.success) {
+          modeldata.storage_path = uploadResult.data.storagePath;
+          modeldata.bunny_url = uploadResult.data.url;
+          modeldata.file_size = uploadResult.data.size;
 
-      modeldata.s3_key = uploadResult.key;
-      modeldata.s3_url = uploadResult.url;
-      modeldata.file_size = uploadResult.size;
-
-      const oldRecord = await DB.Lessons.findOne({ where: { id: recid } });
-      if (oldRecord && oldRecord.s3_key) {
-        try {
-          await bunnyVideoDelivery.deleteVideo(oldRecord.s3_key);
-        } catch (deleteError: any) {
-          console.warn('Could not delete old video:', deleteError.message);
+          if (uploadResult.data.videoId) {
+            modeldata.bunny_video_id = uploadResult.data.videoId;
+            modeldata.transcoding_status = uploadResult.data.status || 'processing';
+          }
+        } else {
+          throw new Error('Failed to upload video');
         }
-      }
 
-      uploader.deleteRecordFiles(modeldata.file, 'file');
-    }
+       const oldRecord = await DB.Lessons.findOne({ where: { id: recid } });
+       if (oldRecord) {
+         try {
+           await BunnyHelper.handleVideoDeletion(
+             oldRecord.bunny_video_id,
+             oldRecord.storage_path
+           );
+         } catch (deleteError: any) {
+           console.warn('Could not delete old video:', deleteError.message);
+         }
+       }
+     }
 
     const where: any = { id: recid };
     await DB.Lessons.update(modeldata, { where });
     
-    const query: any = { raw: true, where, attributes: DB.Lessons.editFields() };
+    const query: any = { raw: false, where, attributes: DB.Lessons.editFields() };
     const record = await DB.Lessons.findOne(query);
     
-    return res.json(record);
+    return res.json(record?.toJSON());
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -252,24 +377,28 @@ router.post('/edit/:recid', [
 
 router.get('/delete/:recid', async (req: Request, res: Response) => {
   try {
-    const recid = (req.params.recid || '').split(',');
+    const recid = utils.asString(req.params.recid).split(',');
     const query: any = {};
     const where: any = { id: recid };
-    query.raw = true;
+    query.raw = false;
     query.where = where;
 
     const records: any[] = await DB.Lessons.findAll(query);
 
-    for (const record of records) {
-      if (record.s3_key) {
-        try {
-          await bunnyVideoDelivery.deleteVideo(record.s3_key);
-        } catch (err: any) {
-          console.error('Error deleting video:', err.message);
-        }
-      }
-      uploader.deleteRecordFiles(record.file, 'file');
-    }
+     for (const record of records) {
+       const recordData = record.toJSON();
+       if (recordData.bunny_video_id || recordData.storage_path) {
+         try {
+           await BunnyHelper.handleVideoDeletion(
+             recordData.bunny_video_id,
+             recordData.storage_path
+           );
+         } catch (err: any) {
+           console.error('Error deleting video:', err.message);
+         }
+       }
+       uploader.deleteRecordFiles(recordData.file, 'file');
+     }
 
     await DB.Lessons.destroy(query);
     return res.json(recid);

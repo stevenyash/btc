@@ -7,17 +7,17 @@ import utils from '../helpers/utils.js';
 import mailer from '../helpers/mailer.js';
 import validateFormData from '../helpers/validate_form.js';
 import { generateCsrfToken } from '../middleware/csrf.js';
-import { authLimiter, signupLimiter } from '../middleware/rateLimiters.js';
-import DB from '../models/db.ts';
+import { authLimiter } from '../middleware/rateLimiters.js';
+import DB from '../models/db.js';
 import TokenBlacklist from '../models/token_blacklist.js';
 
 const router = Router();
 
 router.use('/login', authLimiter);
 router.use('/forgotusercode', authLimiter);
-router.use('/register', signupLimiter);
 
 interface User {
+  user_role_id: any;
   id: number;
   email: string;
   username: string;
@@ -25,41 +25,6 @@ interface User {
   usercode: string;
   account_status?: string;
 }
-
-router.post('/register', [
-  body('username').not().isEmpty().trim(),
-  body('email').not().isEmpty().isEmail(),
-  body('phone').not().isEmpty(),
-  body('usercode').not().isEmpty(),
-], validateFormData as any, async (req: Request, res: Response) => {
-  try {
-    const modeldata = (req as any).getValidFormData();
-    
-    const existingUser = await DB.Users.findOne({
-      where: {
-        [DB.op.or]: [
-          { email: modeldata.email },
-          { username: modeldata.username },
-          { phone: modeldata.phone }
-        ]
-      }
-    });
-
-    if (existingUser) {
-      return res.status(400).json({ error: "An account with this information already exists" });
-    }
-
-    modeldata.usercode = utils.usercodeHash(modeldata.usercode);
-    modeldata.account_status = 'active';
-    modeldata.role_id = 2;
-
-    const record = await DB.Users.create(modeldata);
-    return res.json({ message: "Account created successfully", userId: record.id });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: message });
-  }
-});
 
 router.post('/login', [
   body('username').trim().not().isEmpty(),
@@ -97,6 +62,7 @@ router.post('/login', [
     const loginData = await getUserLoginData(user, res);
     return res.json(loginData);
   } catch (err) {
+    console.log("login" ,err);
     const message = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ error: message });
   }
@@ -158,7 +124,7 @@ router.post('/logout', async (req: Request, res: Response) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (token) {
       try {
-        const decoded: any = jwt.verify(token, (config as any).auth.apiTokenSecret, {
+        const decoded: any = jwt.verify(token, process.env.AUTH_API_TOKEN_SECRET || '', {
           algorithms: ['HS256']
         });
         if (decoded.jti) {
@@ -192,77 +158,181 @@ router.get('/csrf-token', (req: Request, res: Response) => {
 });
 
 router.get('/me', async (req: Request, res: Response) => {
-  try {
-    const userid = (req as any).user?.id;
-    if (!userid) {
-      return res.status(401).json({ error: "Unauthorized" });
+   try {
+     const userid = (req as any).user?.id;
+     if (!userid) {
+       return res.status(401).json({ error: "Unauthorized" });
+     }
+
+      const user: User | null = await DB.Users.findOne({
+        where: { id: userid },
+        attributes: ['id', 'username', 'email', 'phone', 'user_role_id']
+      });
+
+     if (!user) {
+       return res.status(404).json({ error: "User not found" });
+     }
+
+     // Get role information
+     const role = await DB.Roles.findOne({
+       where: { role_id: user.user_role_id },
+       attributes: ['role_id', 'role_name']
+     });
+
+     // Get role-based permissions from role_permissions table
+     const rolePerms = await DB.RolePermissions.findAll({
+       where: { role_id: user.user_role_id },
+       raw: true
+     });
+     const permissions: string[] = [];
+     rolePerms.forEach((p: any) => {
+       if (p.list) permissions.push(`${p.page}.list`);
+       if (p.view) permissions.push(`${p.page}.view`);
+       if (p.edit) permissions.push(`${p.page}.edit`);
+       if (p.remove) permissions.push(`${p.page}.remove`);
+       if (p.store) permissions.push(`${p.page}.store`);
+     });
+
+     // Get user-specific privileges
+     const userPrivs = await DB.UserPrivileges.findAll({
+       where: {
+         user_id: userid,
+         is_active: true
+       } as any,
+       attributes: ['privilege']
+     });
+     const userPrivileges = userPrivs.map((p: any) => p.privilege);
+
+     // Combine permissions (role + user-specific)
+     const allPermissions = [...permissions, ...userPrivileges];
+
+      return res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        role_id: role?.role_id || null,
+        role_name: role?.role_name || null,
+        permissions: allPermissions
+      });
+   } catch (err) {
+     const message = err instanceof Error ? err.message : String(err);
+     return res.status(500).json({ error: message });
+   }
+});
+
+router.put('/me', async (req: Request, res: Response) => {
+   try {
+     const userid = (req as any).user?.id;
+     if (!userid) {
+       return res.status(401).json({ error: "Unauthorized" });
+     }
+
+     const { username, email, phone } = req.body;
+
+     // Build update object with only provided fields
+     const updateData: any = {};
+     if (username !== undefined) updateData.username = username;
+     if (email !== undefined) updateData.email = email;
+     if (phone !== undefined) updateData.phone = phone;
+
+     if (Object.keys(updateData).length === 0) {
+       return res.status(400).json({ error: "No fields to update" });
+     }
+
+     try {
+       await DB.Users.update(updateData, {
+         where: { id: userid }
+       });
+     } catch (err: any) {
+       if (err.code === 'ER_DUP_ENTRY' || err.name === 'SequelizeUniqueConstraintError') {
+         return res.status(409).json({ error: "Username or email already exists" });
+       }
+       throw err;
+     }
+
+      // Fetch updated user
+      const user: User | null = await DB.Users.findByPk(userid, {
+        attributes: ['id', 'username', 'email', 'phone', 'user_role_id']
+      });
+
+     if (!user) {
+       return res.status(404).json({ error: "User not found" });
+     }
+
+     // Get role info
+     const role = await DB.Roles.findOne({
+       where: { role_id: user.user_role_id },
+       attributes: ['role_id', 'role_name']
+     });
+
+      // Return updated user data (permissions not included in update response)
+      return res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        role_id: role?.role_id || null,
+        role_name: role?.role_name || null
+      });
+   } catch (err) {
+     console.log("update profile", err);
+     const message = err instanceof Error ? err.message : String(err);
+     return res.status(500).json({ error: message });
+   }
+});
+
+router.post('/change-usercode', [
+  body('current_usercode').not().isEmpty(),
+  body('new_usercode').not().isEmpty(),
+  body('confirm_usercode').not().isEmpty().custom((val: string, { req }: any) => {
+    if (val !== req.body.new_usercode) {
+      throw new Error("usercodes confirmation does not match");
+    } else {
+      return val;
     }
-    
-    const user: User | null = await DB.Users.findOne({
-      where: { id: userid },
-      attributes: ['id', 'username', 'email', 'phone', 'user_role_id']
-    });
+  }),
+], validateFormData as any, async (req: Request, res: Response) => {
+   try {
+     const userid = (req as any).user?.id;
+     if (!userid) {
+       return res.status(401).json({ error: "Unauthorized" });
+     }
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+     const { current_usercode, new_usercode } = req.body;
 
-    // Get role information
-    const role = await DB.Roles.findOne({
-      where: { role_id: user.user_role_id },
-      attributes: ['role_id', 'role_name']
-    });
+     const user: User | null = await DB.Users.findOne({
+       where: { id: userid },
+       attributes: ['id', 'usercode']
+     });
 
-    // Get role-based permissions from role_permissions table
-    const rolePerms = await DB.RolePermissions.findAll({
-      where: { role_id: user.user_role_id },
-      raw: true
-    });
-    const permissions: string[] = [];
-    rolePerms.forEach((p: any) => {
-      if (p.list) permissions.push(`${p.page}.list`);
-      if (p.view) permissions.push(`${p.page}.view`);
-      if (p.edit) permissions.push(`${p.page}.edit`);
-      if (p.remove) permissions.push(`${p.page}.remove`);
-      if (p.store) permissions.push(`${p.page}.store`);
-    });
+     if (!user) {
+       return res.status(404).json({ error: "User not found" });
+     }
 
-    // Get user-specific privileges
-    const userPrivs = await DB.UserPrivileges.findAll({
-      where: { 
-        user_id: userid,
-        is_active: true
-      } as any,
-      attributes: ['privilege']
-    });
-    const userPrivileges = userPrivs.map((p: any) => p.privilege);
+     if (!utils.usercodeVerify(current_usercode, user.usercode)) {
+       return res.status(401).json({ error: "Current usercode is incorrect" });
+     }
 
-    // Combine permissions (role + user-specific)
-    const allPermissions = [...permissions, ...userPrivileges];
+     const newHashedUsercode = utils.usercodeHash(new_usercode);
+     await DB.Users.update({ usercode: newHashedUsercode }, { where: { id: userid } });
 
-    return res.json({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      phone: user.phone,
-      role_id: role?.role_id || null,
-      role_name: role?.role_name || null,
-      permissions: allPermissions
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: message });
-  }
+     return res.json({ message: "Usercode changed successfully" });
+   } catch (err) {
+     console.log("change-usercode", err);
+     const message = err instanceof Error ? err.message : String(err);
+     return res.status(500).json({ error: message });
+   }
 });
 
 async function sendusercodeResetLink(user: User): Promise<boolean> {
   const token = generateUserToken(user);
-  const resetlink = `${(config as any).app.frontendUrl}/#/index/resetusercode?token=${token}`;
+  const resetlink = `${process.env.APP_FRONTEND_URL || 'http://localhost:5173'}/#/index/resetusercode?token=${token}`;
   const username = user.username;
   const email = user.email;
   const mailtitle = 'usercode Reset';
-
-  const viewData = { username, email, resetlink, config };
+  
+  const viewData = { username, email, resetlink };
   const mailbody = await ejs.renderFile("views/pages/index/usercode_reset_email_template.ejs", viewData);
 
   const mailResult: any = await mailer.sendMail(email, mailtitle, mailbody);
@@ -275,12 +345,12 @@ async function sendusercodeResetLink(user: User): Promise<boolean> {
 }
 
 async function getUserLoginData(user: User, res: Response) {
-  const expiresIn = (config as any).auth.jwtDuration + 'm';
+  const expiresIn = `${process.env.AUTH_JWT_DURATION || '30'}m`;
   const userid = user.id;
   const jti = crypto.randomUUID();
   const token = jwt.sign(
     { sub: userid, jti },
-    (config as any).auth.apiTokenSecret,
+    process.env.AUTH_API_TOKEN_SECRET || '',
     { expiresIn, algorithm: 'HS256' }
   );
   return { token };
@@ -290,7 +360,7 @@ function generateUserToken(user: User): string {
   const expiresIn = '10m';
   const userid = user.id;
   const jti = crypto.randomUUID();
-  const token = jwt.sign({ sub: userid, jti }, (config as any).auth.userTokenSecret, {
+  const token = jwt.sign({ sub: userid, jti }, process.env.AUTH_USER_TOKEN_SECRET || '', {
     expiresIn,
     algorithm: 'HS256'
   });
@@ -299,7 +369,7 @@ function generateUserToken(user: User): string {
 
 function getUserIDFromJwt(token: string): number {
   try {
-    const decoded: any = jwt.verify(token, (config as any).auth.userTokenSecret, {
+    const decoded: any = jwt.verify(token, process.env.AUTH_USER_TOKEN_SECRET || '', {
       algorithms: ['HS256']
     });
     return decoded.sub;

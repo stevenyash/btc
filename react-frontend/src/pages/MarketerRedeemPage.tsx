@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react"
 import {
   Star,
-  DollarSign,
   ArrowLeft,
   CheckCircle,
   XCircle,

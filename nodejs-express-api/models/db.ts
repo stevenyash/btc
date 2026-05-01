@@ -2,47 +2,47 @@ import { sequelize } from './basemodel.js';
 import { Op } from 'sequelize';
 
 // Import models
-import AboutUs from './aboutus.ts';
-import ActiveSubscriptions from './activesubscriptions.ts';
-import AssignRights from './assignrights.ts';
-import ContactUs from './contactus.ts';
-import Grades from './grades.ts';
-import GuestTracker from './guesttracker.ts';
-import GuestLessonPayments from './guestLessonPayments.ts';
-import Invites from './invites.ts';
-import LearningAreas from './learningareas.ts';
-import LearningLevels from './learninglevels.ts';
-import Lessons from './lessons.ts';
-import LessonSetting from './lessonsetting.ts';
-import LessonTrack from './lessontrack.ts';
-import LessonAccessLogs from './lessonaccesslogs.ts';
-import Marketers from './marketers.ts';
-import MarketerCommissions from './marketer_commissions.ts';
-import MarketerPointRedemptions from './marketer_point_redemptions.ts';
-import MarketerWithdrawals from './marketer_withdrawals.ts';
-import SystemSettings from './system_settings.ts';
-import NewsletterSubscribers from './newslettersubscribers.ts';
-import Packages from './packages.ts';
-import Purchases from './purchases.ts';
-import Questions from './questions.ts';
-import RolePermissions from './rolepermissions.ts';
-import Roles from './roles.ts';
-import Scheduler from './scheduler.ts';
-import ServicesSettings from './servicessettings.ts';
-import SubscriberTracker from './subscribertracker.ts';
-import Subscriptions from './subscriptions.ts';
-import SubscriptionTypes from './subscriptiontypes.ts';
-import Subtopics from './subtopics.ts';
-import Topics from './topics.ts';
-import Transactions from './transactions.ts';
-import TutorialRegister from './tutorialregister.ts';
-import TutorialsSettings from './tutorialssettings.ts';
-import UserActivity from './useractivity.ts';
-import UserGuide from './userguide.ts';
-import UserPrivileges from './userprivileges.ts';
-import Users from './users.ts';
-import Videos from './videos.ts';
-import TokenBlacklist from './token_blacklist.ts';
+import AboutUs from './aboutus.js';
+import ActiveSubscriptions from './activesubscriptions.js';
+import AssignRights from './assignrights.js';
+import ContactUs from './contactus.js';
+import Grades from './grades.js';
+import GuestTracker from './guesttracker.js';
+import GuestLessonPayments from './guestLessonPayments.js';
+import Invites from './invites.js';
+import LearningAreas from './learningareas.js';
+import LearningLevels from './learninglevels.js';
+import Lessons from './lessons.js';
+import LessonSetting from './lessonsetting.js';
+import LessonTrack from './lessontrack.js';
+import LessonAccessLogs from './lessonaccesslogs.js';
+import Marketers from './marketers.js';
+import MarketerCommissions from './marketer_commissions.js';
+import MarketerPointRedemptions from './marketer_point_redemptions.js';
+import MarketerWithdrawals from './marketer_withdrawals.js';
+import SystemSettings from './system_settings.js';
+import NewsletterSubscribers from './newslettersubscribers.js';
+import Packages from './packages.js';
+import Purchases from './purchases.js';
+import Questions from './questions.js';
+import RolePermissions from './rolepermissions.js';
+import Roles from './roles.js';
+import Scheduler from './scheduler.js';
+import ServicesSettings from './servicessettings.js';
+import SubscriberTracker from './subscribertracker.js';
+import Subscriptions from './subscriptions.js';
+import SubscriptionTypes from './subscriptiontypes.js';
+import Subtopics from './subtopics.js';
+import Topics from './topics.js';
+import Transactions from './transactions.js';
+import TutorialRegister from './tutorialregister.js';
+import TutorialsSettings from './tutorialssettings.js';
+import UserActivity from './useractivity.js';
+import UserGuide from './userguide.js';
+import UserPrivileges from './userprivileges.js';
+import Users from './users.js';
+import Videos from './videos.js';
+import TokenBlacklist from './token_blacklist.js';
 
 // Set up associations
 // Scheduler associations
@@ -133,8 +133,19 @@ Purchases.belongsTo(Lessons, { foreignKey: 'lesson_id', as: 'lesson' });
 Users.hasMany(Subscriptions, { foreignKey: 'user_id', as: 'subscriptions' });
 Subscriptions.belongsTo(Users, { foreignKey: 'user_id', as: 'user' });
 
+// Transaction associations
+Users.hasMany(Transactions, { foreignKey: 'user_id', as: 'transactions' });
+Transactions.belongsTo(Users, { foreignKey: 'user_id', as: 'user' });
+
+Subscriptions.hasMany(Transactions, { foreignKey: 'details_id', as: 'transactions' });
+Transactions.belongsTo(Subscriptions, { foreignKey: 'details_id', as: 'subscription' });
+
 SubscriptionTypes.hasMany(Subscriptions, { foreignKey: 'subscription_type_id', as: 'subscriptions' });
 Subscriptions.belongsTo(SubscriptionTypes, { foreignKey: 'subscription_type_id', as: 'subscription_type' });
+
+// Package associations
+SubscriptionTypes.hasMany(Packages, { foreignKey: 'subscription_type_id', as: 'packages' });
+Packages.belongsTo(SubscriptionTypes, { foreignKey: 'subscription_type_id', as: 'subscription_type' });
 
 // Video associations
 Lessons.hasMany(Videos, { foreignKey: 'lesson_id', as: 'videos' });
@@ -147,17 +158,19 @@ Questions.belongsTo(Topics, { foreignKey: 'topic_id', as: 'topic' });
 Subtopics.hasMany(Questions, { foreignKey: 'subtopic_id', as: 'questions' });
 Questions.belongsTo(Subtopics, { foreignKey: 'subtopic_id', as: 'subtopic' });
 
-// Marketer associations
-Marketers.hasMany(MarketerCommissions, { foreignKey: 'marketer_id', as: 'commissions' });
-MarketerCommissions.belongsTo(Marketers, { foreignKey: 'marketer_id', as: 'marketer' });
-MarketerCommissions.belongsTo(Users, { foreignKey: 'user_id', as: 'user' });
-MarketerCommissions.belongsTo(Transactions, { foreignKey: 'transaction_id', as: 'transaction' });
+	// Marketer associations
+	Marketers.hasMany(MarketerCommissions, { foreignKey: 'marketer_id', as: 'commissions' });
+	MarketerCommissions.belongsTo(Marketers, { foreignKey: 'marketer_id', as: 'marketer' });
+	MarketerCommissions.belongsTo(Users, { foreignKey: 'user_id', as: 'user' });
+	MarketerCommissions.belongsTo(Transactions, { foreignKey: 'transaction_id', as: 'transaction' });
 
-Marketers.hasMany(MarketerPointRedemptions, { foreignKey: 'marketer_id', as: 'point_redemptions' });
-MarketerPointRedemptions.belongsTo(Marketers, { foreignKey: 'marketer_id', as: 'marketer' });
+	Marketers.hasMany(MarketerPointRedemptions, { foreignKey: 'marketer_id', as: 'point_redemptions' });
+	MarketerPointRedemptions.belongsTo(Marketers, { foreignKey: 'marketer_id', as: 'marketer' });
 
-Marketers.hasMany(MarketerWithdrawals, { foreignKey: 'marketer_id', as: 'withdrawals' });
-MarketerWithdrawals.belongsTo(Marketers, { foreignKey: 'marketer_id', as: 'marketer' });
+	Marketers.hasMany(MarketerWithdrawals, { foreignKey: 'marketer_id', as: 'withdrawals' });
+	MarketerWithdrawals.belongsTo(Marketers, { foreignKey: 'marketer_id', as: 'marketer' });
+
+	Marketers.belongsTo(Users, { foreignKey: 'user_id', as: 'user' });
 
 // GuestTracker and LessonAccessLogs associations
 GuestTracker.hasMany(LessonAccessLogs, {

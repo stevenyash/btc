@@ -16,11 +16,12 @@ export default function SubscriberDashboardPage() {
     totalLessons,
     subscriptionStatus,
     hasActiveSubscription,
-    packages,
     isLoading,
     fetchSubscriberDetails,
     clearError
   } = useSubscriptionStore()
+
+  const currentPackage = subscriberDetails?.packages
 
   useEffect(() => {
     fetchSubscriberDetails()
@@ -165,7 +166,7 @@ export default function SubscriberDashboardPage() {
                   </CardContent>
                 </Card>
 
-                {/* Current Package */}
+                  {/* Current Package */}
                 <Card className="border-l-4 border-l-purple-500">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Current Package</CardTitle>
@@ -173,11 +174,11 @@ export default function SubscriberDashboardPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-lg font-bold truncate">
-                      {packages?.[0]?.name || "No package"}
+                      {currentPackage?.name || "No package"}
                     </div>
-                    {packages?.[0] && (
+                    {currentPackage && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        {packages[0].no_of_lessons} lessons • {packages[0].duration_amount} {packages[0].duration_unit}
+                        {currentPackage.no_of_lessons} lessons • {currentPackage.duration_amount} {currentPackage.duration_unit}
                       </p>
                     )}
                   </CardContent>
@@ -194,42 +195,42 @@ export default function SubscriberDashboardPage() {
                       <CardDescription>Information about your current subscription package</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {packages && packages.length > 0 ? (
+                      {currentPackage ? (
                         <div className="space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Package Name</p>
-                              <p className="text-lg font-semibold">{packages[0].name}</p>
+                              <p className="text-lg font-semibold">{currentPackage.name}</p>
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Subscription Type</p>
                               <p className="text-lg font-semibold">
-                                {packages[0].subscription_type_name || "Standard"}
+                                 {currentPackage['subscription_type.name'] || "Standard"}
                               </p>
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Total Lessons</p>
-                              <p className="text-lg font-semibold">{packages[0].no_of_lessons}</p>
+                              <p className="text-lg font-semibold">{currentPackage.no_of_lessons}</p>
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Duration</p>
                               <p className="text-lg font-semibold">
-                                {packages[0].duration_amount} {packages[0].duration_unit}
+                                {currentPackage.duration_amount} {currentPackage.duration_unit}
                               </p>
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Fee Paid</p>
-                              <p className="text-lg font-semibold">KSh {packages[0].fee?.toLocaleString()}</p>
+                              <p className="text-lg font-semibold">KSh {currentPackage.fee?.toLocaleString()}</p>
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Concurrent Access</p>
-                              <p className="text-lg font-semibold">{packages[0].concurrent_access} devices</p>
+                              <p className="text-lg font-semibold">{currentPackage.concurrent_access} devices</p>
                             </div>
                           </div>
-                          {packages[0].description && (
+                          {currentPackage.description && (
                             <div className="pt-4 border-t">
                               <p className="text-sm font-medium text-muted-foreground mb-1">Description</p>
-                              <p className="text-sm">{packages[0].description}</p>
+                              <p className="text-sm">{currentPackage.description}</p>
                             </div>
                           )}
                         </div>

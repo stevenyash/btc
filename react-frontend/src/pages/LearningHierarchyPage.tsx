@@ -9,7 +9,6 @@ import {
   Trash2,
   X,
   RefreshCw,
-  ChevronDown,
   ChevronRight,
   Save,
   Eye,

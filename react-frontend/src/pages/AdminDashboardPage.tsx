@@ -17,7 +17,7 @@ import {
   UserCheck,
   Video,
   Shield,
-  Film
+  Upload
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -109,14 +109,30 @@ export default function AdminDashboardPage() {
                   <Shield className="mr-2 h-4 w-4" />
                   Roles & Permissions
                 </Button>
-                <Button 
-                  variant="secondary"
-                  className="bg-purple-500 hover:bg-purple-600 text-white"
-                  onClick={() => navigate("/admin/hls")}
-                >
-                  <Film className="mr-2 h-4 w-4" />
-                  HLS Transcode
-                </Button>
+                 <Button 
+                   variant="secondary"
+                   className="bg-purple-500 hover:bg-purple-600 text-white"
+                   onClick={() => navigate("/admin/bunny-sync")}
+                 >
+                   <Video className="mr-2 h-4 w-4" />
+                   Bunny Sync
+                 </Button>
+                 <Button 
+                   variant="secondary"
+                   className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                   onClick={() => navigate("/admin/bunny-upload")}
+                 >
+                   <Upload className="mr-2 h-4 w-4" />
+                   Upload Videos
+                 </Button>
+                 <Button 
+                   variant="secondary"
+                   className="bg-orange-500 hover:bg-orange-600 text-white"
+                   onClick={() => navigate("/admin/bunny-migrate")}
+                 >
+                   <RefreshCw className="mr-2 h-4 w-4" />
+                   Migrate S3 → Bunny
+                 </Button>
               </div>
             )}
           </div>

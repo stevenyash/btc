@@ -1,4 +1,4 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 interface TutorialsSettingsAttributes {
 	id: number;

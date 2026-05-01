@@ -1,8 +1,8 @@
 import { create } from "zustand";
-import axios, { isAxiosError } from "axios";
+import { isAxiosError } from "axios";
 import { api, publicApi } from "@/services/api";
 
-export type MpesaStatus = "idle" | "loading" | "pending_pin" | "success" | "error";
+export type MpesaStatus = "idle" | "loading" | "pending" | "success" | "error";
 
 export interface BusinessMetadata {
   [key: string]: unknown;
@@ -32,7 +32,7 @@ interface MpesaState {
     businessMetadata?: BusinessMetadata
   ) => Promise<{ success: boolean; checkoutId: string | null }>;
 
-  verify: () => Promise<MpesaTransaction | null>;
+   verify: (checkoutRequestID?: string) => Promise<MpesaTransaction | null>;
 
   clearTransaction: () => void;
 
@@ -73,13 +73,15 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
 
       console.log("STK push response:", response.data);
 
-      if (response.data.success && response.data.checkoutRequestID) {
+       if (response.data.success && response.data.checkoutRequestID) {
         const checkoutId = response.data.checkoutRequestID;
         set({
-          status: "pending_pin",
+          status: "pending",
           checkoutId,
         });
         console.log("Payment initiated, checkoutId:", checkoutId);
+        // Automatically start verification polling
+        setTimeout(() => get().verify(checkoutId), 0);
         return { success: true, checkoutId };
       }
 
@@ -156,7 +158,7 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
           return null;
         }
 
-        set({ status: "pending_pin" });
+        set({ status: "pending" });
         attempts++;
         if (attempts >= MAX_POLL_ATTEMPTS) {
           set({

@@ -67,55 +67,7 @@ class MpesaService {
     }
   }
 
-class MpesaService {
-  private consumerKey: string;
-  private consumerSecret: string;
-  private organizationShortCode: string;
-  private passKey: string;
-  private environment: string;
-  private InitiatorName: string;
-  private initPassword: string | undefined;
-  private securityCredential: string | undefined;
-
-  constructor() {
-    const mpesa = mpesaConfig as { mpesa: MpesaConfigValues };
-    this.consumerKey = mpesa.mpesa.APP_KEY;
-    this.consumerSecret = mpesa.mpesa.APP_SECRET;
-    this.organizationShortCode = mpesa.mpesa.SHORTCODE;
-    this.passKey = mpesa.mpesa.LNM_PASSKEY;
-    this.environment = process.env.MPESA_ENV || "production";
-    this.InitiatorName = mpesa.mpesa.INITIATOR_NAME || "bitstutorconnect";
-    this.initPassword = mpesa.mpesa.INIT_PASSWORD;
-    this.securityCredential = mpesa.mpesa.SECURITY_CREDENTIAL;
-  }
-
-  generateSecurityCredential(): string {
-    try {
-      const mpesa = mpesaConfig as { mpesa: MpesaConfigValues };
-      const certificatePath = mpesa.mpesa.CERTIFICATE_PATH;
-      const usercode = mpesa.mpesa.INITusercode;
-
-      if (!certificatePath || !fs.existsSync(certificatePath)) {
-        console.error(`Certificate not found at ${certificatePath}`);
-        return "";
-      }
-
-      const certificate = fs.readFileSync(certificatePath, "utf8");
-      const encrypted = crypto.publicEncrypt(
-        {
-          key: certificate,
-          padding: crypto.constants.RSA_PKCS1_PADDING,
-        },
-        Buffer.from(usercode || "")
-      );
-
-      return encrypted.toString("base64");
-    } catch (error) {
-      console.error("Error generating security credential:", error);
-      return "";
-    }
-  }
-
+   
   getSecurityCredential(): string {
     if (this.securityCredential) {
       return this.securityCredential;
@@ -295,7 +247,7 @@ class MpesaService {
     }
 
     const payload = {
-      InitiatorName: this.InitiatorName,
+      InitiatorName: this.initiatorName,
       SecurityCredential: securityCredential,
       CommandID: "BusinessPayment",
       Amount: amount,
@@ -329,7 +281,7 @@ class MpesaService {
     const accessToken = await this.getAccessToken();
 
     const payload = {
-      Initiator: this.InitiatorName,
+      Initiator: this.initiatorName,
       SecurityCredential: this.securityCredential,
       CommandID: "TransactionStatusQuery",
       TransactionID: transactionID,
@@ -359,7 +311,7 @@ class MpesaService {
     const accessToken = await this.getAccessToken();
 
     const payload = {
-      Initiator: this.InitiatorName,
+      Initiator: this.initiatorName,
       SecurityCredential: this.securityCredential,
       CommandID: "AccountBalance",
       PartyA: this.organizationShortCode,
@@ -392,7 +344,7 @@ class MpesaService {
     const accessToken = await this.getAccessToken();
 
     const payload = {
-      Initiator: this.InitiatorName,
+      Initiator: this.initiatorName,
       SecurityCredential: this.securityCredential,
       CommandID: "TransactionReversal",
       TransactionID: transactionID,

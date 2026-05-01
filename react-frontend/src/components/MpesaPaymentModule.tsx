@@ -6,27 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMpesaStore, type BusinessMetadata } from "@/stores/useMpesaStore";
 
-interface MpesaPaymentModuleProps {
-  amount: number;
-  accountReference: string;
-  businessMetadata?: BusinessMetadata;
-  defaultPhone?: string;
-  skipActivation?: boolean; // If true, callback handles activation - don't activate manually
-  onSuccess: (transaction: {
-    checkoutRequestID: string;
-    transactionID?: string;
-    amount: number;
-    phoneNumber: string;
-    businessMetadata?: BusinessMetadata;
-  }) => void;
-  onFailure: (error: string) => void;
-}
+ interface MpesaPaymentModuleProps {
+   amount: number;
+   accountReference: string;
+   businessMetadata?: BusinessMetadata;
+   defaultPhone?: string;
+   readonlyPhone?: boolean;
+   skipActivation?: boolean; // If true, callback handles activation - don't activate manually
+   onSuccess: (transaction: {
+     checkoutRequestID: string;
+     transactionID?: string;
+     amount: number;
+     phoneNumber: string;
+     businessMetadata?: BusinessMetadata;
+   }) => void;
+   onFailure: (error: string) => void;
+ }
 
 export function MpesaPaymentModule({
   amount,
   accountReference,
   businessMetadata,
   defaultPhone,
+  readonlyPhone = false,
   skipActivation = false,
   onSuccess,
   onFailure,
@@ -98,10 +100,9 @@ export function MpesaPaymentModule({
     setPhoneNumber(formatted);
   };
 
-  const displayPhone = phoneNumber || "";
-  const isPaymentInitiated = status === "pending_pin" || status === "success";
+   const displayPhone = phoneNumber || "";
 
-  if (status === "idle" || status === "error") {
+   if (status === "idle" || status === "error") {
     return (
       <Card className="w-full max-w-md mx-auto">
         <CardHeader>
@@ -121,28 +122,28 @@ export function MpesaPaymentModule({
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone Number</Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="7XXXXXXXX or 254XXXXXXXXX"
-              value={displayPhone}
-              onChange={handlePhoneChange}
-              disabled={status === "pending_pin"}
-            />
-            <p className="text-xs text-muted-foreground">
-              Enter your M-Pesa registered phone number
-            </p>
-          </div>
+           <div className="space-y-2">
+             <Label htmlFor="phone">Phone Number</Label>
+             <Input
+               id="phone"
+               type="tel"
+               placeholder="7XXXXXXXX or 254XXXXXXXXX"
+               value={displayPhone}
+               onChange={handlePhoneChange}
+               readOnly={readonlyPhone}
+             />
+             <p className="text-xs text-muted-foreground">
+               Enter your M-Pesa registered phone number
+             </p>
+           </div>
 
-          <Button
-            onClick={handlePay}
-            disabled={!phoneNumber || phoneNumber.length < 9 || status === "pending_pin"}
-            className="w-full"
-          >
-            {status === "pending_pin" ? "Payment Initiated" : `Pay KSh ${paymentAmount.toLocaleString()}`}
-          </Button>
+            <Button
+              onClick={handlePay}
+              disabled={!phoneNumber || phoneNumber.length < 9}
+              className="w-full"
+            >
+              {`Pay KSh ${paymentAmount.toLocaleString()}`}
+            </Button>
         </CardContent>
       </Card>
     );
@@ -162,7 +163,7 @@ export function MpesaPaymentModule({
     );
   }
 
-  if (status === "pending_pin") {
+  if (status === "pending") {
     const handleManualVerify = async () => {
       if (checkoutId) {
         verify(checkoutId);

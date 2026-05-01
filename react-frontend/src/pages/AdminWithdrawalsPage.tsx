@@ -53,7 +53,7 @@ export default function AdminWithdrawalsPage() {
   const fetchWithdrawals = async () => {
     setIsLoading(true)
     try {
-      const response = await api.get("/admin/withdrawal_requests", {
+      const response = await api.get("/admin/marketer-withdrawals", {
         params: {
           status: statusFilter,
           page: currentPage,
@@ -85,22 +85,22 @@ export default function AdminWithdrawalsPage() {
 
   const fetchStats = async () => {
     try {
-      const response = await api.get("/admin/withdrawal_requests", {
+      const response = await api.get("/admin/marketer-withdrawals", {
         params: { status: "pending", page: 1, limit: 1 }
       })
       const pending = response.data?.totalRecords || (Array.isArray(response.data) ? response.data.length : 0)
       
-      const procResponse = await api.get("/admin/withdrawal_requests", {
+      const procResponse = await api.get("/admin/marketer-withdrawals", {
         params: { status: "processing", page: 1, limit: 1 }
       })
       const processing = procResponse.data?.totalRecords || (Array.isArray(procResponse.data) ? procResponse.data.length : 0)
       
-      const compResponse = await api.get("/admin/withdrawal_requests", {
+      const compResponse = await api.get("/admin/marketer-withdrawals", {
         params: { status: "completed", page: 1, limit: 1 }
       })
       const completed = compResponse.data?.totalRecords || (Array.isArray(compResponse.data) ? compResponse.data.length : 0)
       
-      const failResponse = await api.get("/admin/withdrawal_requests", {
+      const failResponse = await api.get("/admin/marketer-withdrawals", {
         params: { status: "failed", page: 1, limit: 1 }
       })
       const failed = failResponse.data?.totalRecords || (Array.isArray(failResponse.data) ? failResponse.data.length : 0)

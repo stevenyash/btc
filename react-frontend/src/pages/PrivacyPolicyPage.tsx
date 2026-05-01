@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Shield, Lock, Eye, Trash2, Mail, Phone } from "lucide-react"
+import { Shield, Mail, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import Layout from "@/components/Layout"

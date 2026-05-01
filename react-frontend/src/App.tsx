@@ -1,43 +1,59 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route } from "react-router-dom"
-import HomePage from "./pages/HomePage"
-import LoginPage from "./pages/LoginPage"
-import RegistrationPage from "./pages/RegistrationPage"
-import SubscriptionsPage from "./pages/SubscriptionsPage"
-import SubscriptionCheckoutPage from "./pages/SubscriptionCheckoutPage"
-import PackagesPage from "./pages/PackagesPage"
-import SubscriberDashboardPage from "./pages/SubscriberDashboardPage"
-import MarketerDashboardPage from "./pages/MarketerDashboardPage"
-import AdminDashboardPage from "./pages/AdminDashboardPage"
-import AdminPackagesPage from "./pages/AdminPackagesPage"
-import MarketerManagementPage from "./pages/MarketerManagementPage"
-import MarketerEarningsAdminPage from "./pages/MarketerEarningsAdminPage"
-import MarketerWithdrawPage from "./pages/MarketerWithdrawPage"
-import MarketerRedeemPage from "./pages/MarketerRedeemPage"
-import MarketerEarningsPage from "./pages/MarketerEarningsPage"
-import ReferralsPage from "./pages/ReferralsPage"
-import LessonManagementPage from "./pages/LessonManagementPage"
-import LearningHierarchyPage from "./pages/LearningHierarchyPage"
-import InvitesPage from "./pages/InvitesPage"
-import WeekendTutorialsPage from "./pages/WeekendTutorialsPage"
-import AboutUsPage from "./pages/AboutUsPage"
-import GoToClassPage from "./pages/GoToClassPage"
 
-// New pages
-import ContactUsPage from "./pages/ContactUsPage"
-import UserGuidePage from "./pages/UserGuidePage"
-import PrivacyPolicyPage from "./pages/PrivacyPolicyPage"
-import TermsOfServicePage from "./pages/TermsOfServicePage"
-import AccountSettingsPage from "./pages/AccountSettingsPage"
-import ChangeUsercodePage from "./pages/ChangeUsercodePage"
-import ForgotUsercodePage from "./pages/ForgotUsercodePage"
-import NotFoundPage from "./pages/NotFoundPage"
-import UnauthorizedPage from "./pages/UnauthorizedPage"
-import AdminUsersPage from "./pages/AdminUsersPage"
-import AdminWithdrawalsPage from "./pages/AdminWithdrawalsPage"
-import AdminRolesPage from "./pages/AdminRolesPage"
-import AdminHLSPage from "./pages/AdminHLSPage"
-import AdminTransactionsPage from "./pages/AdminTransactionsPage"
-import AdminSubscriptionsPage from "./pages/AdminSubscriptionsPage"
+// Lazy-loaded pages
+const HomePage = lazy(() => import('./pages/HomePage'))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
+const SubscriptionCheckoutPage = lazy(() => import('./pages/SubscriptionCheckoutPage'))
+const PackagesPage = lazy(() => import('./pages/PackagesPage'))
+const PackageCheckoutPage = lazy(() => import('./pages/PackageCheckoutPage'))
+const SubscriberDashboardPage = lazy(() => import('./pages/SubscriberDashboardPage'))
+const MarketerDashboardPage = lazy(() => import('./pages/MarketerDashboardPage'))
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
+const AdminPackagesPage = lazy(() => import('./pages/AdminPackagesPage'))
+const MarketerManagementPage = lazy(() => import('./pages/MarketerManagementPage'))
+const MarketerEarningsAdminPage = lazy(() => import('./pages/MarketerEarningsAdminPage'))
+const MarketerWithdrawPage = lazy(() => import('./pages/MarketerWithdrawPage'))
+const MarketerRedeemPage = lazy(() => import('./pages/MarketerRedeemPage'))
+const MarketerEarningsPage = lazy(() => import('./pages/MarketerEarningsPage'))
+const ReferralsPage = lazy(() => import('./pages/ReferralsPage'))
+const LessonManagementPage = lazy(() => import('./pages/LessonManagementPage'))
+const LearningHierarchyPage = lazy(() => import('./pages/LearningHierarchyPage'))
+const InvitesPage = lazy(() => import('./pages/InvitesPage'))
+const WeekendTutorialsPage = lazy(() => import('./pages/WeekendTutorialsPage'))
+const GoToClassPage = lazy(() => import('./pages/GoToClassPage'))
+const AboutUsPage = lazy(() => import('./pages/AboutUsPage'))
+const ContactUsPage = lazy(() => import('./pages/ContactUsPage'))
+const UserGuidePage = lazy(() => import('./pages/UserGuidePage'))
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
+const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'))
+const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'))
+const ChangeUsercodePage = lazy(() => import('./pages/ChangeUsercodePage'))
+const ForgotUsercodePage = lazy(() => import('./pages/ForgotUsercodePage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
+const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'))
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
+const AdminWithdrawalsPage = lazy(() => import('./pages/AdminWithdrawalsPage'))
+const AdminRolesPage = lazy(() => import('./pages/AdminRolesPage'))
+const AdminTransactionsPage = lazy(() => import('./pages/AdminTransactionsPage'))
+const AdminSubscriptionsPage = lazy(() => import('./pages/AdminSubscriptionsPage'))
+const BunnySyncAdminPage = lazy(() => import('./pages/BunnySyncAdminPage'))
+const BunnyUploadAdminPage = lazy(() => import('./pages/BunnyUploadAdminPage'))
+
+// Page loading fallback
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+  </div>
+)
+
+// Wrap page with loading fallback
+const withSuspense = (Component: React.ComponentType) => (
+  <Suspense fallback={<PageLoader />}>
+    <Component />
+  </Suspense>
+)
 
 // Protected route wrapper
 import { ProtectedRoute } from "./components/ProtectedRoute"
@@ -47,32 +63,39 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/customlogin" element={<LoginPage />} />
-        <Route path="/forgot-usercode" element={<ForgotUsercodePage />} />
-        <Route path="/register" element={<RegistrationPage />} />
-        <Route path="/subscriptions" element={<SubscriptionsPage />} />
-        <Route path="/subscribe/:packageId/checkout" element={<SubscriptionCheckoutPage />} />
-        <Route path="/packages" element={<PackagesPage />} />
-        <Route path="/packages/buy/:id" element={<PackagesPage />} />
-        <Route path="/weekend-tutorials" element={<WeekendTutorialsPage />} />
-        <Route path="/gotoclass" element={<GoToClassPage />} />
-        <Route path="/class" element={<GoToClassPage />} />
-        <Route path="/subscribe/:id" element={<SubscriptionsPage />} />
-        <Route path="/aboutus" element={<AboutUsPage />} />
-        <Route path="/contactus" element={<ContactUsPage />} />
-        <Route path="/guide" element={<UserGuidePage />} />
-        <Route path="/privacy" element={<PrivacyPolicyPage />} />
-        <Route path="/terms" element={<TermsOfServicePage />} />
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        <Route path="/" element={withSuspense(HomePage)} />
+        <Route path="/login" element={withSuspense(LoginPage)} />
+        <Route path="/customlogin" element={withSuspense(LoginPage)} />
+        <Route path="/forgot-usercode" element={withSuspense(ForgotUsercodePage)} />
+        <Route path="/subscriptions" element={withSuspense(SubscriptionsPage)} />
+        <Route path="/subscribe/:packageId/checkout" element={withSuspense(SubscriptionCheckoutPage)} />
+        <Route path="/packages" element={withSuspense(PackagesPage)} />
+        <Route path="/packages/buy/:id" element={withSuspense(PackageCheckoutPage)} />
+          <Route path="/weekend-tutorials" element={withSuspense(WeekendTutorialsPage)} />
+          <Route path="/gotoclass" element={withSuspense(GoToClassPage)} />
+          <Route path="/class" element={withSuspense(GoToClassPage)} />
+         <Route
+            path="/class/subscriber"
+            element={
+              <ProtectedRoute requireAuth requireRole="subscriber">
+                {withSuspense(GoToClassPage)}
+              </ProtectedRoute>
+            }
+         />
+         <Route path="/subscribe/:id" element={withSuspense(SubscriptionsPage)} />
+        <Route path="/aboutus" element={withSuspense(AboutUsPage)} />
+        <Route path="/contactus" element={withSuspense(ContactUsPage)} />
+        <Route path="/guide" element={withSuspense(UserGuidePage)} />
+        <Route path="/privacy" element={withSuspense(PrivacyPolicyPage)} />
+        <Route path="/terms" element={withSuspense(TermsOfServicePage)} />
+        <Route path="/unauthorized" element={withSuspense(UnauthorizedPage)} />
 
         {/* Protected routes */}
         <Route
           path="/account"
           element={
             <ProtectedRoute requireAuth>
-              <AccountSettingsPage />
+              {withSuspense(AccountSettingsPage)}
             </ProtectedRoute>
           }
         />
@@ -80,7 +103,7 @@ function App() {
           path="/settings"
           element={
             <ProtectedRoute requireAuth>
-              <ChangeUsercodePage />
+              {withSuspense(ChangeUsercodePage)}
             </ProtectedRoute>
           }
         />
@@ -88,7 +111,7 @@ function App() {
           path="/dashboard"
           element={
             <ProtectedRoute requireAuth requireRole="subscriber">
-              <SubscriberDashboardPage />
+              {withSuspense(SubscriberDashboardPage)}
             </ProtectedRoute>
           }
         />
@@ -98,7 +121,7 @@ function App() {
           path="/marketer-dashboard"
           element={
             <ProtectedRoute requireAuth requireRole="marketer">
-              <MarketerDashboardPage />
+              {withSuspense(MarketerDashboardPage)}
             </ProtectedRoute>
           }
         />
@@ -106,7 +129,7 @@ function App() {
           path="/marketer-withdraw"
           element={
             <ProtectedRoute requireAuth requireRole="marketer">
-              <MarketerWithdrawPage />
+              {withSuspense(MarketerWithdrawPage)}
             </ProtectedRoute>
           }
         />
@@ -114,7 +137,7 @@ function App() {
           path="/marketer-redeem"
           element={
             <ProtectedRoute requireAuth requireRole="marketer">
-              <MarketerRedeemPage />
+              {withSuspense(MarketerRedeemPage)}
             </ProtectedRoute>
           }
         />
@@ -122,7 +145,7 @@ function App() {
           path="/marketer/earnings"
           element={
             <ProtectedRoute requireAuth requireRole="marketer">
-              <MarketerEarningsPage />
+              {withSuspense(MarketerEarningsPage)}
             </ProtectedRoute>
           }
         />
@@ -132,7 +155,7 @@ function App() {
           path="/admin"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminDashboardPage />
+              {withSuspense(AdminDashboardPage)}
             </ProtectedRoute>
           }
         />
@@ -140,7 +163,7 @@ function App() {
           path="/admin/withdrawals"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminWithdrawalsPage />
+              {withSuspense(AdminWithdrawalsPage)}
             </ProtectedRoute>
           }
         />
@@ -148,7 +171,7 @@ function App() {
           path="/admin/users"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminUsersPage />
+              {withSuspense(AdminUsersPage)}
             </ProtectedRoute>
           }
         />
@@ -156,7 +179,7 @@ function App() {
           path="/admin/transactions"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminTransactionsPage />
+              {withSuspense(AdminTransactionsPage)}
             </ProtectedRoute>
           }
         />
@@ -164,7 +187,7 @@ function App() {
           path="/admin/packages"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminPackagesPage />
+              {withSuspense(AdminPackagesPage)}
             </ProtectedRoute>
           }
         />
@@ -172,31 +195,39 @@ function App() {
           path="/admin/subscriptions"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminSubscriptionsPage />
+              {withSuspense(AdminSubscriptionsPage)}
             </ProtectedRoute>
           }
         />
         <Route
-          path="/admin/roles"
-          element={
-            <ProtectedRoute requireAuth requireRole="superadmin">
-              <AdminRolesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/hls"
+          path="/admin/bunny-sync"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <AdminHLSPage />
+              {withSuspense(BunnySyncAdminPage)}
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/bunny-upload"
+          element={
+            <ProtectedRoute requireAuth requireRole="admin">
+              {withSuspense(BunnyUploadAdminPage)}
+            </ProtectedRoute>
+          }
+        />
+          <Route
+            path="/admin/roles"
+           element={
+             <ProtectedRoute requireAuth requireRole="admin">
+               {withSuspense(AdminRolesPage)}
+             </ProtectedRoute>
+           }
+         />
         <Route
           path="/admin/marketers"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <MarketerManagementPage />
+              {withSuspense(MarketerManagementPage)}
             </ProtectedRoute>
           }
         />
@@ -204,7 +235,7 @@ function App() {
           path="/admin/marketer-earnings"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <MarketerEarningsAdminPage />
+              {withSuspense(MarketerEarningsAdminPage)}
             </ProtectedRoute>
           }
         />
@@ -212,7 +243,7 @@ function App() {
           path="/admin/lessons"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <LessonManagementPage />
+              {withSuspense(LessonManagementPage)}
             </ProtectedRoute>
           }
         />
@@ -220,7 +251,7 @@ function App() {
           path="/admin/learning-hierarchy"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
-              <LearningHierarchyPage />
+              {withSuspense(LearningHierarchyPage)}
             </ProtectedRoute>
           }
         />
@@ -228,7 +259,7 @@ function App() {
           path="/invites"
           element={
             <ProtectedRoute requireAuth>
-              <InvitesPage />
+              {withSuspense(InvitesPage)}
             </ProtectedRoute>
           }
         />
@@ -236,7 +267,7 @@ function App() {
           path="/invites/add"
           element={
             <ProtectedRoute requireAuth>
-              <InvitesPage />
+              {withSuspense(InvitesPage)}
             </ProtectedRoute>
           }
         />
@@ -244,7 +275,7 @@ function App() {
           path="/referrals"
           element={
             <ProtectedRoute requireAuth requireRole="marketer">
-              <ReferralsPage />
+              {withSuspense(ReferralsPage)}
             </ProtectedRoute>
           }
         />

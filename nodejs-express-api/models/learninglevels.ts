@@ -1,10 +1,9 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 interface LearningLevelsAttributes {
 	level_id: number;
 	name: string | null;
 	description: string | null;
-	sort_order: number;
 	is_active: boolean;
 }
 
@@ -13,7 +12,7 @@ interface LearningLevelsCreationAttributes
 
 
 class LearningLevels extends BaseModel<LearningLevelsAttributes, LearningLevelsCreationAttributes>
- {
+	 {
 
 	static initModel() {
 		return super.init(
@@ -21,7 +20,6 @@ class LearningLevels extends BaseModel<LearningLevelsAttributes, LearningLevelsC
 				level_id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
 				name: { type: DataTypes.STRING },
 				description: { type: DataTypes.TEXT },
-				sort_order: { type: DataTypes.INTEGER, defaultValue: 0 },
 				is_active: { type: DataTypes.BOOLEAN, defaultValue: true }
 			},
 			{
@@ -33,15 +31,15 @@ class LearningLevels extends BaseModel<LearningLevelsAttributes, LearningLevelsC
 	}
 
 	static listFields(): string[] {
-		return ["level_id", "name", "description", "sort_order", "is_active"];
+		return ["level_id", "name", "description", "is_active"];
 	}
 
 	static viewFields(): string[] {
-		return ["level_id", "name", "description", "sort_order", "is_active"];
+		return ["level_id", "name", "description", "is_active"];
 	}
 
 	static editFields(): string[] {
-		return ["level_id", "name", "description", "sort_order", "is_active"];
+		return ["level_id", "name", "description", "is_active"];
 	}
 
 	static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {

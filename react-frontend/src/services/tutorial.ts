@@ -64,7 +64,11 @@ export const tutorialService = {
   },
 
   fetchGradesByLevel: async (levelId: number): Promise<Grade[]> => {
-    return apiService.get<Grade[]>(`/components_data/grades_by_level/${levelId}`);
+    const result = await apiService.get<{ success: boolean; data: Array<{id: number; name: string}> }>(`/components_data/grades_by_level/${levelId}`);
+    if (result.success) {
+      return result.data.map(g => ({ value: g.id, label: g.name }));
+    }
+    return [];
   },
 
   fetchWeekendTutorials: async (gradeId: number, page = 1, perPage = 20): Promise<TutorialResponse> => {

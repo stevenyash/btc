@@ -1,107 +1,68 @@
 
 > react-frontend@0.0.0 build
-> tsc -b && vite build
+> tsc -b && vite build --mode production
 
-src/App.tsx(170,41): error TS2322: Type '"superadmin"' is not assignable to type '"admin" | "subscriber" | "marketer" | undefined'.
-src/components/MpesaPaymentModule.tsx(77,14): error TS2554: Expected 0 arguments, but got 1.
-src/components/MpesaPaymentModule.tsx(102,9): error TS6133: 'isPaymentInitiated' is declared but its value is never read.
-src/components/MpesaPaymentModule.tsx(132,25): error TS2367: This comparison appears to be unintentional because the types '"error" | "idle"' and '"pending_pin"' have no overlap.
-src/components/MpesaPaymentModule.tsx(141,65): error TS2367: This comparison appears to be unintentional because the types '"error" | "idle"' and '"pending_pin"' have no overlap.
-src/components/MpesaPaymentModule.tsx(144,14): error TS2367: This comparison appears to be unintentional because the types '"error" | "idle"' and '"pending_pin"' have no overlap.
-src/components/MpesaPaymentModule.tsx(168,16): error TS2554: Expected 0 arguments, but got 1.
-src/components/ProtectedRoute.tsx(24,46): error TS6133: 'subLoading' is declared but its value is never read.
-src/components/ProtectedRoute.tsx(25,55): error TS6133: 'marketerLoading' is declared but its value is never read.
-src/components/ProtectedRoute.tsx(26,52): error TS6133: 'adminLoading' is declared but its value is never read.
-src/components/ProtectedRoute.tsx(40,22): error TS2554: Expected 0 arguments, but got 1.
-src/components/Sidebar.tsx(22,3): error TS6133: 'LayoutDashboard' is declared but its value is never read.
-src/components/Sidebar.tsx(26,3): error TS6133: 'Store' is declared but its value is never read.
-src/components/Sidebar.tsx(27,3): error TS6133: 'Clock' is declared but its value is never read.
-src/components/Sidebar.tsx(42,11): error TS6133: 'isAdmin' is declared but its value is never read.
-src/components/Sidebar.tsx(42,39): error TS6133: 'isSuperadmin' is declared but its value is never read.
-src/components/Sidebar.tsx(53,9): error TS6133: 'baseMenus' is declared but its value is never read.
-src/hooks/useGuestLessonPayment.ts(37,21): error TS6133: 'setIsLoading' is declared but its value is never read.
-src/pages/AccountSettingsPage.tsx(6,16): error TS6133: 'Mail' is declared but its value is never read.
-src/pages/AccountSettingsPage.tsx(6,22): error TS6133: 'Phone' is declared but its value is never read.
-src/pages/AccountSettingsPage.tsx(25,17): error TS2339: Property 'updateProfile' does not exist on type 'AuthState'.
-src/pages/AccountSettingsPage.tsx(26,11): error TS6133: 'subscriberDetails' is declared but its value is never read.
-src/pages/AccountSettingsPage.tsx(183,24): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(185,25): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(213,28): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(213,63): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(254,24): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(254,61): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(257,24): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(257,70): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(260,24): error TS2304: Cannot find name 'Link'.
-src/pages/AccountSettingsPage.tsx(260,62): error TS2304: Cannot find name 'Link'.
-src/pages/AdminPackagesPage.tsx(62,28): error TS2345: Argument of type '{ data: SubscriptionType[]; total: number; }' is not assignable to parameter of type 'SetStateAction<{ id: number; name: string; }[]>'.
-src/pages/AdminRolesPage.tsx(2,51): error TS6133: 'CheckCircle' is declared but its value is never read.
-src/pages/AdminRolesPage.tsx(2,64): error TS6133: 'XCircle' is declared but its value is never read.
-src/pages/AdminRolesPage.tsx(7,1): error TS6133: 'Badge' is declared but its value is never read.
-src/pages/AdminRolesPage.tsx(48,9): error TS6133: 'navigate' is declared but its value is never read.
-src/pages/AdminRolesPage.tsx(49,9): error TS6133: 'isSuperadmin' is declared but its value is never read.
-src/pages/AdminSubscriptionsPage.tsx(52,9): error TS6133: 'fetchSubscriptionTypes' is declared but its value is never read.
-src/pages/AdminTransactionsPage.tsx(6,3): error TS6133: 'X' is declared but its value is never read.
-src/pages/AdminUsersPage.tsx(7,3): error TS6133: 'X' is declared but its value is never read.
-src/pages/AdminUsersPage.tsx(22,1): error TS6133: 'Label' is declared but its value is never read.
-src/pages/AdminUsersPage.tsx(26,1): error TS6133: 'WithPermission' is declared but its value is never read.
-src/pages/ChangeUsercodePage.tsx(27,11): error TS2339: Property 'changeUsercode' does not exist on type 'AuthState'.
-src/pages/ForgotUsercodePage.tsx(38,22): error TS6133: 'setResetToken' is declared but its value is never read.
-src/pages/GoToClassPage.tsx(28,1): error TS6133: 'useGuestLessonPayment' is declared but its value is never read.
-src/pages/InvitesPage.tsx(6,3): error TS6133: 'X' is declared but its value is never read.
-src/pages/InvitesPage.tsx(49,9): error TS2353: Object literal may only specify known properties, and 'page' does not exist in type 'AxiosRequestConfig<any>'.
-src/pages/LessonManagementPage.tsx(11,3): error TS6133: 'Play' is declared but its value is never read.
-src/pages/MarketerEarningsAdminPage.tsx(3,3): error TS6133: 'Users' is declared but its value is never read.
-src/pages/MarketerEarningsAdminPage.tsx(4,3): error TS6133: 'Plus' is declared but its value is never read.
-src/pages/MarketerEarningsAdminPage.tsx(6,3): error TS6133: 'Trash2' is declared but its value is never read.
-src/pages/MarketerEarningsAdminPage.tsx(7,3): error TS6133: 'X' is declared but its value is never read.
-src/pages/MarketerEarningsAdminPage.tsx(16,3): error TS6133: 'ChevronDown' is declared but its value is never read.
-src/pages/MarketerEarningsAdminPage.tsx(142,39): error TS2339: Property 'getCommissionSettings' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(154,43): error TS2339: Property 'getMarketerCommissions' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(167,43): error TS2339: Property 'getMarketerWithdrawals' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(180,43): error TS2339: Property 'getMarketerRedemptions' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(193,26): error TS2339: Property 'updateCommissionSettings' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(206,26): error TS2339: Property 'updateMarketerCommission' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(216,26): error TS2339: Property 'updateMarketerWithdrawal' does not exist on type 'AdminService'.
-src/pages/MarketerEarningsAdminPage.tsx(226,26): error TS2339: Property 'updateMarketerRedemption' does not exist on type 'AdminService'.
-src/pages/MarketerManagementPage.tsx(10,3): error TS6133: 'DollarSign' is declared but its value is never read.
-src/pages/MarketerManagementPage.tsx(13,3): error TS6133: 'ArrowUpRight' is declared but its value is never read.
-src/pages/MarketerRedeemPage.tsx(4,3): error TS6133: 'DollarSign' is declared but its value is never read.
-src/pages/PackagesPage.tsx(24,10): error TS6133: 'selectedPackageId' is declared but its value is never read.
-src/pages/PrivacyPolicyPage.tsx(2,18): error TS6133: 'Lock' is declared but its value is never read.
-src/pages/PrivacyPolicyPage.tsx(2,24): error TS6133: 'Eye' is declared but its value is never read.
-src/pages/PrivacyPolicyPage.tsx(2,29): error TS6133: 'Trash2' is declared but its value is never read.
-src/pages/SubscriptionCheckoutPage.tsx(21,29): error TS6133: 'validateKenyanPhone' is declared but its value is never read.
-src/pages/SubscriptionCheckoutPage.tsx(55,10): error TS6133: 'checkoutRequestId' is declared but its value is never read.
-src/pages/SubscriptionCheckoutPage.tsx(55,29): error TS6133: 'setCheckoutRequestId' is declared but its value is never read.
-src/pages/TermsOfServicePage.tsx(2,20): error TS6133: 'Shield' is declared but its value is never read.
-src/pages/TermsOfServicePage.tsx(2,28): error TS6133: 'AlertTriangle' is declared but its value is never read.
-src/pages/TermsOfServicePage.tsx(2,43): error TS6133: 'Scale' is declared but its value is never read.
-src/pages/TermsOfServicePage.tsx(2,50): error TS6133: 'CreditCard' is declared but its value is never read.
-src/pages/TermsOfServicePage.tsx(2,62): error TS6133: 'Ban' is declared but its value is never read.
-src/pages/TermsOfServicePage.tsx(159,22): error TS2304: Cannot find name 'Mail'.
-src/pages/TermsOfServicePage.tsx(163,22): error TS2304: Cannot find name 'Phone'.
-src/pages/UserGuidePage.tsx(7,3): error TS6133: 'ChevronRight' is declared but its value is never read.
-src/pages/WeekendTutorialsPage.tsx(81,10): error TS6133: 'questions' is declared but its value is never read.
-src/pages/WeekendTutorialsPage.tsx(182,35): error TS6133: 'transaction' is declared but its value is never read.
-src/services/admin.ts(272,9): error TS2322: Type '(page?: number, limit?: number) => Promise<{ data: SubscriptionType[]; total: number; }>' is not assignable to type '{ (page?: number | undefined, limit?: number | undefined): Promise<{ data: SubscriptionType[]; total: number; }>; (): Promise<{ id: number; name: string; }[]>; }'.
-  Type 'Promise<{ data: SubscriptionType[]; total: number; }>' is not assignable to type 'Promise<{ id: number; name: string; }[]>'.
-    Type '{ data: SubscriptionType[]; total: number; }' is missing the following properties from type '{ id: number; name: string; }[]': length, pop, push, concat, and 35 more.
-src/services/admin.ts(479,38): error TS6133: 'onProgress' is declared but its value is never read.
-src/services/auth.ts(4,15): error TS2484: Export declaration conflicts with exported declaration of 'User'.
-src/services/auth.ts(4,21): error TS2484: Export declaration conflicts with exported declaration of 'LoginData'.
-src/services/auth.ts(4,32): error TS2484: Export declaration conflicts with exported declaration of 'RegisterData'.
-src/services/auth.ts(4,46): error TS2484: Export declaration conflicts with exported declaration of 'LoginResponse'.
-src/services/auth.ts(4,61): error TS2484: Export declaration conflicts with exported declaration of 'LoginRequest'.
-src/services/marketer.ts(103,55): error TS2339: Property 'dashboard' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/marketer.ts(114,57): error TS2339: Property 'performance' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/marketer.ts(125,48): error TS2339: Property 'activity' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/marketer.ts(130,54): error TS2339: Property 'earnings' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/marketer.ts(146,57): error TS2339: Property 'commissions' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/marketer.ts(152,55): error TS2339: Property 'dashboard' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/marketer.ts(158,55): error TS2339: Property 'dashboard' does not exist on type 'AxiosResponse<any, any, {}>'.
-src/services/subscription.ts(1,26): error TS6133: 'tokenService' is declared but its value is never read.
-src/stores/useMpesaStore.ts(2,8): error TS6133: 'axios' is declared but its value is never read.
-src/stores/useSubscriptionStore.ts(7,8): error TS6133: 'MpesaPaymentRequest' is declared but its value is never read.
-src/stores/useSubscriptionStore.ts(38,11): error TS6133: 'get' is declared but its value is never read.
-src/stores/useSubscriptionStore.ts(61,32): error TS6133: 'packages' is declared but its value is never read.
+[36mvite v8.0.8 [32mbuilding client environment for production...[36m[39m
+[2K
+transforming...Γ£ô 1974 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                      1.36 kB Γöé gzip:   0.53 kB
+dist/assets/index-BESxRaa9.css                      69.40 kB Γöé gzip:  11.31 kB
+dist/assets/WithPermission-DlNOE6PL.js               0.27 kB Γöé gzip:   0.20 kB
+dist/assets/label-C_e4ynr1.js                        0.39 kB Γöé gzip:   0.28 kB
+dist/assets/useRole-QRM33QAI.js                      0.40 kB Γöé gzip:   0.24 kB
+dist/assets/CanI-CmdZC8VP.js                         0.44 kB Γöé gzip:   0.30 kB
+dist/assets/rolldown-runtime-Dw2cE7zH.js             0.68 kB Γöé gzip:   0.41 kB
+dist/assets/badge-DXBdNftm.js                        0.80 kB Γöé gzip:   0.44 kB
+dist/assets/tabs-7gCgm-K8.js                         1.18 kB Γöé gzip:   0.51 kB
+dist/assets/useAdminStore-DcBVZutl.js                1.47 kB Γöé gzip:   0.50 kB
+dist/assets/UnauthorizedPage-CTkelcN3.js             2.18 kB Γöé gzip:   0.86 kB
+dist/assets/NotFoundPage-BNix4vQ9.js                 2.61 kB Γöé gzip:   0.97 kB
+dist/assets/LoginPage-Doum2QVZ.js                    2.61 kB Γöé gzip:   1.16 kB
+dist/assets/useMpesaStore-p_oPN9ze.js                2.93 kB Γöé gzip:   1.06 kB
+dist/assets/MpesaPaymentModule-Bux4-up2.js           4.50 kB Γöé gzip:   1.60 kB
+dist/assets/SubscriberClassPage-BmDBOc3c.js          4.72 kB Γöé gzip:   1.57 kB
+dist/assets/useMarketerStore-BtGVC3M4.js             5.13 kB Γöé gzip:   1.21 kB
+dist/assets/ChangeUsercodePage-gkGOeff6.js           5.33 kB Γöé gzip:   1.63 kB
+dist/assets/ForgotUsercodePage-0_RtmONo.js           6.11 kB Γöé gzip:   1.80 kB
+dist/assets/PrivacyPolicyPage-D4IGFywk.js            6.27 kB Γöé gzip:   1.86 kB
+dist/assets/AccountSettingsPage-DN31R51h.js          6.31 kB Γöé gzip:   1.93 kB
+dist/assets/SubscriptionCheckoutPage-Cew0DDik.js     6.39 kB Γöé gzip:   2.03 kB
+dist/assets/ContactUsPage-PD9RGhjY.js                6.40 kB Γöé gzip:   1.60 kB
+dist/assets/InvitesPage-D1pI1Sz-.js                  6.76 kB Γöé gzip:   2.11 kB
+dist/assets/PackagesPage-B9EcPbSM.js                 6.86 kB Γöé gzip:   2.04 kB
+dist/assets/admin-DazfXwHh.js                        7.10 kB Γöé gzip:   1.60 kB
+dist/assets/MarketerEarningsPage-BqZrwKdm.js         7.70 kB Γöé gzip:   1.83 kB
+dist/assets/UserGuidePage-BWDsWH5H.js                7.76 kB Γöé gzip:   2.69 kB
+dist/assets/PackageCheckoutPage-b0xpTlsX.js          7.78 kB Γöé gzip:   2.41 kB
+dist/assets/MarketerWithdrawPage-xKQzozUs.js         7.80 kB Γöé gzip:   2.52 kB
+dist/assets/AdminTransactionsPage-DFFm9xoD.js        8.10 kB Γöé gzip:   2.39 kB
+dist/assets/MarketerRedeemPage-DnpKPZxH.js           8.17 kB Γöé gzip:   2.49 kB
+dist/assets/ReferralsPage-Bc72wasV.js                8.89 kB Γöé gzip:   2.65 kB
+dist/assets/useAuthStore-CP2c9EUE.js                 9.14 kB Γöé gzip:   2.46 kB
+dist/assets/AboutUsPage-kvUojojA.js                  9.18 kB Γöé gzip:   2.54 kB
+dist/assets/SubscriptionsPage-Cqhtxk9K.js            9.32 kB Γöé gzip:   2.79 kB
+dist/assets/AdminWithdrawalsPage-DhHuDmpo.js         9.34 kB Γöé gzip:   2.46 kB
+dist/assets/AdminSubscriptionsPage-5HRD9S6p.js       9.35 kB Γöé gzip:   2.69 kB
+dist/assets/GuestClassPage-CrJhZGIR.js               9.59 kB Γöé gzip:   3.03 kB
+dist/assets/LearningHierarchyPage-DgvHd2bK.js       10.27 kB Γöé gzip:   2.76 kB
+dist/assets/TermsOfServicePage-C1xnSZY9.js          10.34 kB Γöé gzip:   2.95 kB
+dist/assets/AdminPackagesPage-GXZzd81q.js           10.44 kB Γöé gzip:   2.89 kB
+dist/assets/SubscriberDashboardPage-D2yx3aM6.js     10.82 kB Γöé gzip:   2.43 kB
+dist/assets/MigrationAdminPage-BPKvu7ny.js          11.06 kB Γöé gzip:   2.69 kB
+dist/assets/MarketerManagementPage-BcT8QJxU.js      11.40 kB Γöé gzip:   3.21 kB
+dist/assets/AdminRolesPage-DRTywPy2.js              11.55 kB Γöé gzip:   3.34 kB
+dist/assets/HomePage-yNdC0DL-.js                    11.73 kB Γöé gzip:   2.93 kB
+dist/assets/index-Bl9RYm67.js                       11.99 kB Γöé gzip:   3.03 kB
+dist/assets/AdminDashboardPage-D1bap0a_.js          13.61 kB Γöé gzip:   2.83 kB
+dist/assets/MarketerDashboardPage-D7qSLw_F.js       14.24 kB Γöé gzip:   3.15 kB
+dist/assets/LessonManagementPage-zXssW5VT.js        14.42 kB Γöé gzip:   3.94 kB
+dist/assets/AdminUsersPage-CZ_5j0hK.js              15.30 kB Γöé gzip:   3.53 kB
+dist/assets/MarketerEarningsAdminPage-BTCf9zgL.js   19.71 kB Γöé gzip:   3.41 kB
+dist/assets/WeekendTutorialsPage-DD9PkhU4.js        20.10 kB Γöé gzip:   4.87 kB
+dist/assets/Layout-BHribnxx.js                      21.12 kB Γöé gzip:   5.38 kB
+dist/assets/LessonCard-DMwyb0gO.js                  24.00 kB Γöé gzip:   6.60 kB
+dist/assets/react-vendor-BhjUSnIo.js               967.34 kB Γöé gzip: 301.62 kB
+
+[32mΓ£ô built in 1.28s[39m

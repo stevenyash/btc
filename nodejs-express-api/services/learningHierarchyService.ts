@@ -4,7 +4,6 @@ interface LearningLevel {
   level_id: number;
   name: string;
   description?: string;
-  sort_order: number;
   is_active: boolean;
   created_at?: Date;
   updated_at?: Date;
@@ -17,7 +16,6 @@ interface Grade {
   description?: string;
   level_id: number;
   grade?: number;
-  sort_order: number;
   is_active: boolean;
   created_at?: Date;
   updated_at?: Date;
@@ -55,7 +53,6 @@ interface Lesson {
   price?: number;
   is_preview_available?: boolean;
   preview_duration?: number;
-  sort_order?: number;
   is_active?: boolean;
 }
 
@@ -66,9 +63,16 @@ interface Topic {
 }
 
 interface Subtopic {
-  subtopic_id: number;
-  name: string;
-  topic_id?: number;
+	subtopic_id: number;
+	name: string;
+	topic_id?: number;
+}
+
+interface TopicWithSubtopicCount {
+	topic_id: number;
+	name: string;
+	area_id?: number;
+	subtopic_count?: number;
 }
 
 class LearningHierarchyService {
@@ -76,7 +80,7 @@ class LearningHierarchyService {
     try {
       const levels = await DB.LearningLevels.findAll({
         where: { is_active: true },
-        order: [['sort_order', 'ASC']],
+        order: [['name', 'ASC']],
         raw: true
       });
       return levels;
@@ -93,7 +97,7 @@ class LearningHierarchyService {
           level_id: levelId,
           is_active: true 
         },
-        order: [['sort_order', 'ASC']],
+        order: [['name', 'ASC']],
         raw: true
       });
       return grades;
@@ -107,7 +111,7 @@ class LearningHierarchyService {
     try {
       const areas = await DB.LearningAreas.findAll({
         where: { 
-          grade: gradeId,
+          grade_id: gradeId,
           is_active: true 
         },
         order: [['name', 'ASC']],
@@ -127,7 +131,7 @@ class LearningHierarchyService {
           area_id: areaId,
           is_active: true 
         },
-        order: [['sort_order', 'ASC'], ['title', 'ASC']],
+        order: [['title', 'ASC']],
         raw: true
       });
       return lessons;
@@ -244,10 +248,51 @@ class LearningHierarchyService {
         limit: limit,
         raw: true
       });
-      
+
       return areas;
     } catch (error) {
       console.error('Error getting popular areas:', error);
+      throw error;
+    }
+  }
+
+  async getTopicsByArea(areaId: number): Promise<TopicWithSubtopicCount[]> {
+    try {
+      const topics = await DB.Topics.findAll({
+        where: { area_id: areaId },
+        order: [['name', 'ASC']],
+        raw: true
+      });
+
+      const topicsWithCounts = await Promise.all(
+        topics.map(async (topic) => {
+          const subtopicCount = await DB.Subtopics.count({
+            where: { topic_id: topic.topic_id }
+          });
+          return {
+            ...topic,
+            subtopic_count: subtopicCount
+          };
+        })
+      );
+
+      return topicsWithCounts;
+    } catch (error) {
+      console.error('Error getting topics by area:', error);
+      throw error;
+    }
+  }
+
+  async getSubtopicsByTopic(topicId: number): Promise<Subtopic[]> {
+    try {
+      const subtopics = await DB.Subtopics.findAll({
+        where: { topic_id: topicId },
+        order: [['name', 'ASC']],
+        raw: true
+      });
+      return subtopics;
+    } catch (error) {
+      console.error('Error getting subtopics by topic:', error);
       throw error;
     }
   }

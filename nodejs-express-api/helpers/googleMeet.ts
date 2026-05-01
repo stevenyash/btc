@@ -1,8 +1,8 @@
-import { google, calendar_v3 } from "googleapis";
+import { google } from "googleapis";
+import { OAuth2Client } from "google-auth-library";
 import fs from "fs/promises";
 import path from "path";
 import process from "process";
-import { OAuth2Client } from "google-auth-library";
 
 const SCOPES = [
     "https://www.googleapis.com/auth/calendar",
@@ -59,18 +59,21 @@ async function loadSavedCredentials(): Promise<OAuth2Client | null> {
             return null;
         }
 
-        const client = google.auth.fromJSON(credentials) as OAuth2Client;
+        const client = google.auth.fromJSON(credentials);
         
-        client.on('tokens', (tokens) => {
+        // The fromJSON method returns OAuth2Client but TypeScript needs explicit cast
+        const oauthClient = client as any as OAuth2Client;
+        
+        oauthClient.on('tokens', (tokens) => {
             if (tokens.refresh_token) {
                 console.log('New refresh token received, saving...');
-                saveCredentials(client).catch(err => {
+                saveCredentials(oauthClient).catch(err => {
                     console.error('Failed to save new tokens:', err);
                 });
             }
         });
-
-        return client;
+        
+        return oauthClient;
     } catch (err) {
         console.log("Loading credentials failed:", (err as Error).message);
         return null;
@@ -210,7 +213,7 @@ async function createMeetEvent(options: MeetEventOptions): Promise<MeetEventResu
         }
 
         const auth = await authorize();
-        const calendar = google.calendar({ version: "v3", auth });
+        const calendar = google.calendar({ version: "v3", auth } as any);
 
         const startDateTime = new Date(startTime);
         const endDateTime = new Date(endTime);
@@ -225,7 +228,7 @@ async function createMeetEvent(options: MeetEventOptions): Promise<MeetEventResu
             throw new Error("End time must be after start time");
         }
 
-        const event: calendar_v3.Schema$Event = {
+        const event: any = {
             summary,
             description,
             start: {
@@ -247,7 +250,7 @@ async function createMeetEvent(options: MeetEventOptions): Promise<MeetEventResu
 
         const res = await calendar.events.insert({
             calendarId: "primary",
-            resource: event,
+            requestBody: event,
             conferenceDataVersion: 1,
         });
 
@@ -255,8 +258,8 @@ async function createMeetEvent(options: MeetEventOptions): Promise<MeetEventResu
             success: true,
             meetingUrl: res.data.hangoutLink,
             eventId: res.data.id,
-            start: res.data.start || { dateTime: startTime, timeZone },
-            end: res.data.end || { dateTime: endTime, timeZone },
+            start: (res.data.start as any) || { dateTime: startTime, timeZone },
+            end: (res.data.end as any) || { dateTime: endTime, timeZone },
             htmlLink: res.data.htmlLink,
             conferenceData: res.data.conferenceData
         };

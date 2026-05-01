@@ -98,66 +98,66 @@ export const marketerService: MarketerService = {
     return response.data || response;
   },
 
-  async getDashboardData(): Promise<MarketerDashboardData> {
-    const response = await api.get("/marketers/dashboard");
-    const data = response.data?.dashboard || response.dashboard || {};
-    return {
-      conversion_rate: Number(data.conversion_rate) || 0,
-      active_referrals: Number(data.active_referrals) || 0,
-      weekly_growth: Number(data.weekly_growth) || 0,
-      total_invites: Number(data.total_invites) || 0,
-    };
-  },
+   async getDashboardData(): Promise<MarketerDashboardData> {
+     const response = await api.get("/marketers/dashboard");
+     const data = response.data?.dashboard || {};
+     return {
+       conversion_rate: Number(data.conversion_rate) || 0,
+       active_referrals: Number(data.active_referrals) || 0,
+       weekly_growth: Number(data.weekly_growth) || 0,
+       total_invites: Number(data.total_invites) || 0,
+     };
+   },
 
-  async getPerformanceData(): Promise<MarketerPerformanceData> {
-    const response = await api.get("/marketers/dashboard");
-    const data = response.data?.performance || response.performance || {};
-    return {
-      weekly_invites: Number(data.weekly_invites) || 0,
-      monthly_conversions: Number(data.monthly_conversions) || 0,
-      monthly_points: Number(data.monthly_points) || 0,
-      target_progress: Number(data.target_progress) || 0,
-    };
-  },
+   async getPerformanceData(): Promise<MarketerPerformanceData> {
+     const response = await api.get("/marketers/dashboard");
+     const data = response.data?.performance || {};
+     return {
+       weekly_invites: Number(data.weekly_invites) || 0,
+       monthly_conversions: Number(data.monthly_conversions) || 0,
+       monthly_points: Number(data.monthly_points) || 0,
+       target_progress: Number(data.target_progress) || 0,
+     };
+   },
 
-  async getRecentActivity(): Promise<MarketerActivityItem[]> {
-    const response = await api.get("/marketers/dashboard");
-    return response.data?.activity || response.activity || [];
-  },
+   async getRecentActivity(): Promise<MarketerActivityItem[]> {
+     const response = await api.get("/marketers/dashboard");
+     return response.data?.activity || [];
+   },
 
-  async getEarningsSummary(): Promise<MarketerEarningsSummary> {
-    const response = await api.get("/marketers/dashboard");
-    const data = response.data?.earnings || response.earnings || {};
-    return {
-      total_points: Number(data.total_points) || 0,
-      redeemed_points: Number(data.redeemed_points) || 0,
-      available_points: Number(data.available_points) || 0,
-      point_value: Number(data.point_value) || 10,
-      potential_cash: Number(data.potential_cash) || 0,
-      commission_rate: Number(data.commission_rate) || 0.1,
-      total_earnings: Number(data.total_earnings) || 0,
-      pending_earnings: Number(data.pending_earnings) || 0,
-      withdrawn_earnings: Number(data.withdrawn_earnings) || 0,
-    };
-  },
+   async getEarningsSummary(): Promise<MarketerEarningsSummary> {
+     const response = await api.get("/marketers/dashboard");
+     const data = response.data?.earnings || {};
+     return {
+       total_points: Number(data.total_points) || 0,
+       redeemed_points: Number(data.redeemed_points) || 0,
+       available_points: Number(data.available_points) || 0,
+       point_value: Number(data.point_value) || 10,
+       potential_cash: Number(data.potential_cash) || 0,
+       commission_rate: Number(data.commission_rate) || 0.1,
+       total_earnings: Number(data.total_earnings) || 0,
+       pending_earnings: Number(data.pending_earnings) || 0,
+       withdrawn_earnings: Number(data.withdrawn_earnings) || 0,
+     };
+   },
 
-  async getRecentCommissions(limit: number = 10): Promise<MarketerCommission[]> {
-    const response = await api.get("/marketers/dashboard");
-    const data = response.data?.commissions || response.commissions || [];
-    return data.slice(0, limit);
-  },
+   async getRecentCommissions(limit: number = 10): Promise<MarketerCommission[]> {
+     const response = await api.get("/marketers/dashboard");
+     const data = response.data?.commissions || [];
+     return data.slice(0, limit);
+   },
 
-  async getInvitesCount(): Promise<number> {
-    const response = await api.get("/marketers/dashboard");
-    const data = response.data?.dashboard || response.dashboard || {};
-    return Number(data.total_invites) || 0;
-  },
+   async getInvitesCount(): Promise<number> {
+     const response = await api.get("/marketers/dashboard");
+     const data = response.data?.dashboard || {};
+     return Number(data.total_invites) || 0;
+   },
 
-  async getActiveReferralsCount(): Promise<number> {
-    const response = await api.get("/marketers/dashboard");
-    const data = response.data?.dashboard || response.dashboard || {};
-    return Number(data.active_referrals) || 0;
-  },
+   async getActiveReferralsCount(): Promise<number> {
+     const response = await api.get("/marketers/dashboard");
+     const data = response.data?.dashboard || {};
+     return Number(data.active_referrals) || 0;
+   },
 
   async getWithdrawalHistory(): Promise<MarketerWithdrawal[]> {
     const response = await api.get("/marketer_earnings/withdrawals");

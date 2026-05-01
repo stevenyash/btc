@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { 
   Menu, X, User, LogOut, Settings, UserCircle, ChevronDown,
-  Home, BookOpen, GraduationCap, Phone, FileText, Package, Calendar, UserPlus, LogIn,
+  Home, BookOpen, GraduationCap, Phone, FileText, Package, Calendar, LogIn,
   DollarSign, UserCheck, BarChart3
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -42,13 +42,15 @@ export function Header({
 // Base menus (always visible - public)
   const baseMenus: MenuItem[] = [
     { label: "Home", path: "/", icon: Home },
-    { label: "Go to Class", path: "/gotoclass", icon: BookOpen },
-    { label: "About Us", path: "/aboutus", icon: GraduationCap },
+   
+
     { label: "Subscriptions", path: "/subscriptions", icon: Package },
     { label: "Packages", path: "/packages", icon: Package },
-    { label: "Weekend Lessons", path: "/weekend-tutorials", icon: Calendar },
+    { label: "About Us", path: "/aboutus", icon: GraduationCap },
     { label: "Contact Us", path: "/contactus", icon: Phone },
     { label: "User Guide", path: "/guide", icon: FileText },
+      { label: "Weekend Lessons", path: "/weekend-tutorials", icon: Calendar },
+     { label: "Go to Class", path: "/gotoclass", icon: BookOpen },
   ]
 
   // Subscriber menus (logged in only)
@@ -77,12 +79,7 @@ export function Header({
     { label: "Learning Hierarchy", path: "/admin/learning-hierarchy" },
   ]
 
-  // Auth menus (only show when logged out)
-  const authMenus: MenuItem[] = isLoggedIn ? [] : [
-    { label: "Login", path: "/login", icon: LogIn },
-    { label: "Register", path: "/register", icon: UserPlus },
-  ]
-
+ 
   // Filter menus by permission
   const filterByPermission = (menus: MenuItem[]): MenuItem[] => {
     return menus.filter(menu => {
@@ -92,7 +89,7 @@ export function Header({
   }
 
   // Main navigation menus (always public routes + auth when logged out)
-  const allMenus = [...filterByPermission(baseMenus), ...authMenus]
+  const allMenus = [...filterByPermission(baseMenus)]
 
   // Role-specific menus for user dropdown
   const roleMenus: MenuItem[] = [
@@ -242,17 +239,11 @@ export function Header({
             </>
           ) : (
             <>
-              {/* Login/Register Buttons */}
+              {/* Login Button */}
               <Button variant="ghost" asChild>
                 <Link to="/login">
                   <LogIn className="mr-1 md:mr-2 h-4 w-4" />
                   <span className="hidden sm:inline">Login</span>
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link to="/register">
-                  <UserPlus className="mr-1 md:mr-2 h-4 w-4" />
-                  <span className="hidden sm:inline">Register</span>
                 </Link>
               </Button>
             </>

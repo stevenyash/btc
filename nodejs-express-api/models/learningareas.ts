@@ -1,4 +1,4 @@
-import { BaseModel, sequelize } from "./basemodel";
+import { BaseModel, sequelize } from "./basemodel.js";
 import { Optional, DataTypes } from "sequelize";
 
 interface LearningAreasAttributes {
@@ -8,7 +8,6 @@ interface LearningAreasAttributes {
   description: string | null;
   icon: string | null;
   color: string | null;
-  sort_order: number;
   is_active: boolean;
 }
 
@@ -28,7 +27,6 @@ class LearningAreas extends BaseModel<
         description: { type: DataTypes.TEXT },
         icon: { type: DataTypes.STRING },
         color: { type: DataTypes.STRING },
-        sort_order: { type: DataTypes.INTEGER, defaultValue: 0 },
         is_active: { type: DataTypes.BOOLEAN, defaultValue: true }
       },
       {
@@ -40,15 +38,15 @@ class LearningAreas extends BaseModel<
   }
 
   static listFields(): string[] {
-    return ["id", "name", "grade_id", "description", "icon", "color", "sort_order", "is_active"];
+    return ["id", "name", "grade_id", "description", "icon", "color", "is_active"];
   }
 
   static viewFields(): string[] {
-    return ["id", "name", "grade_id", "description", "icon", "color", "sort_order", "is_active"];
+    return ["id", "name", "grade_id", "description", "icon", "color", "is_active"];
   }
 
   static editFields(): string[] {
-    return ["id", "name", "grade_id", "description", "icon", "color", "sort_order", "is_active"];
+    return ["id", "name", "grade_id", "description", "icon", "color", "is_active"];
   }
 
   static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {

@@ -1,20 +1,11 @@
-import { body, param, query, ValidationChain } from "express-validator";
+import { body, param, query, ValidationChain, body as validateBody, query as validateQuery } from "express-validator";
 
 export const validateLessonAccess: ValidationChain[] = [
   param("recid").isInt({ min: 1 }).withMessage("Invalid lesson ID"),
-  query("guest").optional().isIn(["true", "false"]).withMessage("Guest must be true or false"),
-  query("phone")
-    .if(query("guest").equals("true"))
-    .isMobilePhone()
-    .withMessage("Valid phone number required for guest access"),
-  query("user_id")
-    .if(query("guest").equals("false"))
-    .isInt({ min: 1 })
-    .withMessage("User ID required for subscribers"),
-  query("expiresIn")
-    .optional()
-    .isInt({ min: 300, max: 86400 })
-    .withMessage("ExpiresIn must be between 300 and 86400 seconds"),
+  query("guest").optional({ nullable: true, checkFalsy: true }).isIn(["true", "false"]).withMessage("Guest must be true or false"),
+  query("phone").optional({ nullable: true, checkFalsy: true }).isMobilePhone('any' as any).withMessage("Valid phone number required for guest access"),
+  query("user_id").optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage("User ID required for subscribers"),
+  query("expiresIn").optional({ nullable: true, checkFalsy: true }).isInt({ min: 300, max: 86400 }).withMessage("ExpiresIn must be between 300 and 86400 seconds"),
 ];
 
 export const validateLessonCreate: ValidationChain[] = [
@@ -26,7 +17,6 @@ export const validateLessonCreate: ValidationChain[] = [
   body("duration").optional().isInt({ min: 1 }).withMessage("Duration must be positive integer"),
   body("price").optional().isFloat({ min: 0 }).withMessage("Price must be non-negative"),
   body("preview_duration").optional().isInt({ min: 0 }).withMessage("Preview duration must be non-negative"),
-  body("sort_order").optional().isInt({ min: 0 }).withMessage("Sort order must be non-negative"),
 ];
 
 export const validateLessonUpdate: ValidationChain[] = [

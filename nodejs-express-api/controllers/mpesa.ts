@@ -8,7 +8,7 @@ import {
   MpesaCallbackBody,
   MpesaPaymentResult,
 } from "../types/mpesa.js";
-import DB, { op as sequelizeOp } from "../models/db.ts";
+import DB, { op as sequelizeOp } from "../models/db.js";
 import { sendSms } from "../helpers/sms.js";
 import mailer from "../helpers/mailer.js";
 import utils from "../helpers/utils.js";
@@ -157,6 +157,11 @@ MpesaController.post("/callback", async (req: Request, res: Response): Promise<v
               await subscriptionActivation(checkoutRequestID, businessMetadata, record);
               break;
             }
+            case "package":
+            case "packages": {
+              await packageActivation(checkoutRequestID, businessMetadata, record);
+              break;
+            }
             case "subscribelessonactivation": {
               await subscribedLessonActivation(checkoutRequestID, businessMetadata, record);
               break;
@@ -190,27 +195,28 @@ MpesaController.post("/callback", async (req: Request, res: Response): Promise<v
 });
 
 MpesaController.get("/verify/:checkoutRequestID", async (req: Request, res: Response): Promise<void> => {
-  const { checkoutRequestID } = req.params;
-  const transaction = transactionStore.get(checkoutRequestID);
+   const { checkoutRequestID } = req.params;
+   const checkoutID = utils.asString(checkoutRequestID);
+   const transaction = transactionStore.get(checkoutID);
 
   if (!transaction) {
     res.status(404).json({ error: "Transaction not found" });
     return;
   }
 
-  if (transaction.status === "completed" || transaction.status === "success") {
+  if ((transaction.status as string) === "completed") {
     res.json({ status: "success", transaction });
     return;
   }
 
   if (transaction.status === "failed") {
-    res.json({ status: "failed", error: transaction.error });
+    res.json({ status: "failed", error: transaction.updatedAt.toISOString() });
     return;
   }
 
   // Query Safaricom directly for status if local status is pending
   try {
-    const queryResult = await mpesaService.queryStkStatus(checkoutRequestID);
+    const queryResult = await mpesaService.queryStkStatus(checkoutID);
     
     if ("error" in queryResult) {
       res.json({ status: "pending", message: "Transaction still being processed" });
@@ -230,30 +236,35 @@ MpesaController.get("/verify/:checkoutRequestID", async (req: Request, res: Resp
       const businessMetadata = transaction.businessMetadata as Record<string, unknown> || {};
       const activationType = businessMetadata.activationType as string;
       
-      console.log(`STK Query indicates success for ${checkoutRequestID}, triggering activation`);
+      console.log(`STK Query indicates success for ${checkoutID}, triggering activation`);
       
       if (activationType) {
         try {
           switch (activationType) {
             case "subscription": {
-              await subscriptionActivation(checkoutRequestID, businessMetadata, transaction);
+              await subscriptionActivation(checkoutID, businessMetadata, transaction);
+              break;
+            }
+            case "package":
+            case "packages": {
+              await packageActivation(checkoutID, businessMetadata, transaction);
               break;
             }
             case "subscribelessonactivation": {
-              await subscribedLessonActivation(checkoutRequestID, businessMetadata, transaction);
+              await subscribedLessonActivation(checkoutID, businessMetadata, transaction);
               break;
             }
             case "guestlessonactivation": {
-              await guestLessonActivation(checkoutRequestID, businessMetadata, transaction);
+              await guestLessonActivation(checkoutID, businessMetadata, transaction);
               break;
             }
             case "weekendTutorial": {
-              await weekendTutorialActivation(checkoutRequestID, businessMetadata, transaction);
+              await weekendTutorialActivation(checkoutID, businessMetadata, transaction);
               break;
             }
           }
         } catch (actErr) {
-          console.error(`Activation error for ${checkoutRequestID}:`, actErr);
+          console.error(`Activation error for ${checkoutID}:`, actErr);
         }
       }
       
@@ -368,13 +379,14 @@ MpesaController.post("/b2c_timeout", async (req: Request, res: Response): Promis
 MpesaController.post("/manualactivate", async (req: Request, res: Response): Promise<void> => {
   try {
     const { checkoutRequestID, ...overrides } = req.body;
+    const checkoutID = utils.asString(checkoutRequestID);
 
-    if (!checkoutRequestID) {
+    if (!checkoutID) {
       res.status(400).json({ error: "Missing checkoutRequestID" });
       return;
     }
 
-    const record = transactionStore.get(checkoutRequestID);
+    const record = transactionStore.get(checkoutID);
     if (!record) {
       res.status(404).json({ error: "Transaction not found" });
       return;
@@ -388,11 +400,22 @@ MpesaController.post("/manualactivate", async (req: Request, res: Response): Pro
     const metadata = { ...record.businessMetadata, ...overrides };
     const activationType = metadata.activationType as string | undefined;
 
-    console.log(`Activation request: type=${activationType}, checkoutId=${checkoutRequestID}`);
+    console.log(`Activation request: type=${activationType}, checkoutId=${checkoutID}`);
 
     switch (activationType) {
       case "subscription": {
-        const result = await subscriptionActivation(checkoutRequestID, metadata, record);
+        const result = await subscriptionActivation(checkoutID, metadata, record);
+        if (!result.success) {
+          res.status(400).json({ error: result.error });
+          return;
+        }
+        res.json(result);
+        break;
+      }
+
+      case "package":
+      case "packages": {
+        const result = await packageActivation(checkoutID, metadata, record);
         if (!result.success) {
           res.status(400).json({ error: result.error });
           return;
@@ -402,7 +425,7 @@ MpesaController.post("/manualactivate", async (req: Request, res: Response): Pro
       }
 
       case "subscribelessonactivation": {
-        const result = await subscribedLessonActivation(checkoutRequestID, metadata, record);
+        const result = await subscribedLessonActivation(checkoutID, metadata, record);
         if (!result.success) {
           res.status(400).json({ error: result.error });
           return;
@@ -412,7 +435,7 @@ MpesaController.post("/manualactivate", async (req: Request, res: Response): Pro
       }
 
       case "weekendTutorial": {
-        const result = await weekendTutorialActivation(checkoutRequestID, metadata, record);
+        const result = await weekendTutorialActivation(checkoutID, metadata, record);
         if (!result.success) {
           res.status(400).json({ error: result.error });
           return;
@@ -422,17 +445,7 @@ MpesaController.post("/manualactivate", async (req: Request, res: Response): Pro
       }
 
       case "guestlessonactivation": {
-        const result = await guestLessonActivation(checkoutRequestID, metadata, record);
-        if (!result.success) {
-          res.status(400).json({ error: result.error });
-          return;
-        }
-        res.json(result);
-        break;
-      }
-
-      case "guestlessonactivation": {
-        const result = await guestLessonActivation(checkoutRequestID, metadata, record);
+        const result = await guestLessonActivation(checkoutID, metadata, record);
         if (!result.success) {
           res.status(400).json({ error: result.error });
           return;
@@ -500,7 +513,8 @@ export async function subscribedLessonActivation(
       where: { user_id: userId, subscription_id: subscription.id }
     });
     if (lessonTrack && lessonTrack.lesson_balance > 0) {
-      return { success: false, error: "You still have lesson balance. Use your subscription to access lessons for free." };
+      // Allow purchase - they can use credits or buy more
+      // Just continue with activation
     }
     
     const durationMinutes = parseInt(duration, 10) || 90;
@@ -728,9 +742,9 @@ export async function subscriptionActivation(
     if (!businessPlanId) {
       return { success: false, error: "Missing planId" };
     }
-    const userPhone = phoneNumber || record.phoneNumber;
+    const userPhone = String(phoneNumber || record.phoneNumber);
     const userEmail = email as string | null || null;
-    const userName = name as string | undefined || userPhone;
+    const userName = (name as string | undefined) || userPhone;
     const subscriptionPlan = await DB.SubscriptionTypes.findOne({ where: { id: Number(businessPlanId) } });
     if (!subscriptionPlan) {
       return { success: false, error: "Invalid plan ID" };
@@ -900,7 +914,7 @@ export async function subscriptionActivation(
       console.error('Failed to create transaction record:', txErr);
     }
     const smsMessage = isNewUser
-      ? `Welcome to BTC! Your login credentials:\nUsername: ${generatedUsername}\nUsercode: ${generatedUsercode}\nPhone: ${userPhone}\nVisit ${(config as unknown as { app: { url: string } }).app.url} to login.`
+      ? `Welcome to BTC! Your login credentials:\nUsername: ${generatedUsername}\nUsercode: ${generatedUsercode}\nPhone: ${userPhone}\nVisit https://bitstutorconnect.co.ke to login.`
       : `Your BTC subscription has been activated!\nPlan: ${(subscriptionPlan as unknown as { name: string }).name}\nExpires: ${expiryDate.toDateString()}`;
     try {
       await sendSms(userPhone, smsMessage);
@@ -910,7 +924,7 @@ export async function subscriptionActivation(
     if (userEmail) {
       const emailSubject = isNewUser ? "Welcome to BTC - Account Created" : "BTC Subscription Activated";
       const emailBody = isNewUser
-        ? `<h2>Welcome to BTC!</h2><p>Your account has been created successfully.</p><p><strong>Username:</strong> ${generatedUsername}<br><strong>Usercode:</strong> ${generatedUsercode}</p><p>Login at: ${(config as unknown as { app: { url: string } }).app.url}</p>`
+        ? `<h2>Welcome to BTC!</h2><p>Your account has been created successfully.</p><p><strong>Username:</strong> ${generatedUsername}<br><strong>Usercode:</strong> ${generatedUsercode}</p><p>Login at: https://bitstutorconnect.co.ke</p>`
         : `<h2>Subscription Activated</h2><p>Your BTC subscription has been activated.</p><p><strong>Plan:</strong> ${(subscriptionPlan as unknown as { name: string }).name}<br><strong>Expires:</strong> ${expiryDate.toDateString()}</p>`;
       try {
         await mailer.sendMail(userEmail, emailSubject, emailBody);
@@ -918,22 +932,273 @@ export async function subscriptionActivation(
         console.error("Email sending failed:", emailErr);
       }
     }
-    console.log(`Subscription activated for ${userPhone}, plan: ${(subscriptionPlan as unknown as { name: string }).name}, userId: ${userId}`);
-    return {
-      success: true,
-      message: "Subscription activated successfully",
-      checkoutRequestID,
-      planId: businessPlanId,
-      planName: (subscriptionPlan as unknown as { name: string }).name,
-      phoneNumber: userPhone,
-      username: generatedUsername,
-      usercode: generatedUsercode,
-      expiryDate: expiryDate.toISOString(),
-      isNewUser,
-    };
   } catch (error) {
     console.error("Subscription activation error:", error);
     return { success: false, error: "Failed to activate subscription" };
+  }
+}
+
+export async function packageActivation(
+  checkoutRequestID: string,
+  businessMetadata: Record<string, unknown>,
+  record: { phoneNumber: string; amount: number; status: string; transactionID?: string }
+): Promise<{ success: boolean; message?: string; packageId?: number; packageName?: string; phoneNumber?: string; username?: string; usercode?: string; expiryDate?: string; isNewUser?: boolean; lessonsAdded?: number; checkoutRequestID?: string; error?: string }> {
+  try {
+    const { planId, phoneNumber, email, name } = businessMetadata;
+    const packageId = planId as string | undefined;
+    if (!packageId) {
+      return { success: false, error: "Missing packageId" };
+    }
+    const userPhone = String(phoneNumber || record.phoneNumber) as string;
+    const userEmail = email as string | null || null;
+    const userName = name as string | undefined || userPhone;
+
+    // Look up the specific package
+    const packageRecord = await DB.Packages.findOne({
+      where: { id: Number(packageId) },
+      raw: true
+    });
+    if (!packageRecord) {
+      return { success: false, error: "Invalid package ID" };
+    }
+
+    // Validate payment amount matches package fee
+    const expectedAmount = Number(packageRecord.fee);
+    const paidAmount = Number(record.amount);
+    if (paidAmount !== expectedAmount) {
+      return { success: false, error: `Payment amount (${paidAmount}) does not match package price (${expectedAmount})` };
+    }
+
+    // Calculate expiry based on package duration
+    const startDate = new Date();
+    const expiryDate = new Date();
+    const durationAmount = Number(packageRecord.duration_amount) || 30;
+    const durationUnit = packageRecord.duration_unit || 'days';
+    if (durationUnit === 'months') {
+      expiryDate.setMonth(expiryDate.getMonth() + durationAmount);
+    } else if (durationUnit === 'years') {
+      expiryDate.setFullYear(expiryDate.getFullYear() + durationAmount);
+    } else {
+      expiryDate.setDate(expiryDate.getDate() + durationAmount);
+    }
+
+    const generatedUsercode = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const generatedUsername = `user_${userPhone.slice(-8)}`;
+
+    let existingUser = await DB.Users.findOne({ where: { phone: userPhone } });
+    let userId: number;
+    let isNewUser = false;
+    if (existingUser) {
+      userId = (existingUser as unknown as { id: number }).id;
+    } else {
+      const subscriberRole = await DB.Roles.findOne({ where: { role_name: 'Subscriber' } });
+      const subscriberRoleId = (subscriberRole as unknown as { role_id: number })?.role_id || 3;
+      const userData = {
+        username: generatedUsername,
+        phone: userPhone,
+        email: userEmail,
+        usercode: utils.usercodeHash(generatedUsercode),
+        user_role_id: subscriberRoleId,
+        account_status: 'Active',
+        status: 1,
+      };
+      const newUser = await DB.Users.create(userData);
+      userId = (newUser as unknown as { id: number }).id;
+      isNewUser = true;
+    }
+
+    // Find or create subscription (packages are tied to subscription_type)
+    const subscriptionTypeId = packageRecord.subscription_type_id;
+    let subscriptionId: number;
+    let expiryDateForLessons = expiryDate;
+
+    const existingSubscription = await DB.Subscriptions.findOne({
+      where: { user_id: userId, status: 'active' }
+    });
+
+    if (existingSubscription) {
+      // Extend existing subscription expiry
+      const currentExpiry = new Date(existingSubscription.expiry_date);
+      if (currentExpiry > new Date()) {
+        currentExpiry.setTime(currentExpiry.getTime() + (expiryDate.getTime() - startDate.getTime()));
+        await DB.Subscriptions.update(
+          { expiry_date: currentExpiry },
+          { where: { id: existingSubscription.id } }
+        );
+        subscriptionId = existingSubscription.id;
+        expiryDateForLessons = currentExpiry;
+      } else {
+        await DB.Subscriptions.update(
+          { start_date: startDate, expiry_date: expiryDate, status: 'active', phone_no: userPhone, subscription_type_id: subscriptionTypeId },
+          { where: { id: existingSubscription.id } }
+        );
+        subscriptionId = existingSubscription.id;
+        expiryDateForLessons = expiryDate;
+      }
+    } else {
+      const newSubscription = await DB.Subscriptions.create({
+        user_id: userId,
+        subscription_type_id: subscriptionTypeId,
+        status: 'active',
+        start_date: startDate,
+        expiry_date: expiryDate,
+        phone_no: userPhone,
+        subscription_code: checkoutRequestID,
+      });
+      subscriptionId = newSubscription.id;
+      expiryDateForLessons = expiryDate;
+    }
+
+    // Create purchase record
+    const purchase = await DB.Purchases.create({
+      user_id: userId,
+      package_id: packageRecord.id,
+      transaction_date: startDate,
+      transaction_status: 'success',
+      payment_reference: checkoutRequestID,
+      amount_paid: record.amount,
+      expiry_date: expiryDateForLessons,
+    });
+
+    // Find existing lesson track for this subscription
+    const lessontrack = await DB.LessonTrack.findOne({
+      where: { user_id: userId, subscription_id: subscriptionId }
+    });
+
+    const lessonsToAdd = packageRecord.no_of_lessons || 10;
+
+    if (lessontrack) {
+      // TOP-UP: Extend expiry and add lessons to existing track
+      const currentExpires = new Date(lessontrack.expires_at);
+      if (currentExpires > new Date()) {
+        // Add package duration to existing expiry
+        currentExpires.setTime(currentExpires.getTime() + (expiryDate.getTime() - startDate.getTime()));
+        await lessontrack.update({
+          expires_at: currentExpires,
+          lesson_balance: (lessontrack.lesson_balance || 0) + lessonsToAdd,
+          total_lessons: (lessontrack.total_lessons || 0) + lessonsToAdd,
+          status: 'active'
+        });
+        console.log(`Package top-up: Added ${lessonsToAdd} lessons to existing track. New balance: ${(lessontrack.lesson_balance || 0) + lessonsToAdd}`);
+      } else {
+        // Expired track - renew with new lessons
+        await lessontrack.update({
+          expires_at: expiryDateForLessons,
+          lesson_balance: lessonsToAdd,
+          total_lessons: lessonsToAdd,
+          status: 'active',
+          package_id: packageRecord.id
+        });
+        console.log(`Package renewed: Set to ${lessonsToAdd} lessons`);
+      }
+    } else {
+      // NEW: Create lesson track
+      await DB.LessonTrack.create({
+        subscription_id: subscriptionId,
+        user_id: userId,
+        package_id: packageRecord.id,
+        lessons_viewed: 0,
+        lesson_balance: lessonsToAdd,
+        total_lessons: lessonsToAdd,
+        status: 'active',
+        expires_at: expiryDateForLessons,
+      });
+      console.log(`New lesson track: ${lessonsToAdd} lessons`);
+    }
+
+    // Update active subscription
+    const existingActiveSub = await DB.ActiveSubscriptions.findOne({
+      where: { phone: userPhone, status: "Active" }
+    });
+    if (existingActiveSub) {
+      const currentExpiry = new Date(existingActiveSub.expiry_date);
+      if (currentExpiry > new Date()) {
+        currentExpiry.setTime(currentExpiry.getTime() + (expiryDate.getTime() - startDate.getTime()));
+        await DB.ActiveSubscriptions.update(
+          { expiry_date: currentExpiry },
+          { where: { id: existingActiveSub.id } }
+        );
+      } else {
+        await DB.ActiveSubscriptions.update(
+          { start_date: startDate, expiry_date: expiryDateForLessons, status: "Active" },
+          { where: { id: existingActiveSub.id } }
+        );
+      }
+    } else {
+      await DB.ActiveSubscriptions.create({
+        username: generatedUsername,
+        phone: userPhone,
+        email: userEmail,
+        subscription_code: checkoutRequestID,
+        status: "Active",
+        start_date: startDate,
+        expiry_date: expiryDateForLessons,
+      });
+    }
+
+    // Create transaction record
+    try {
+      const subscriptionType = await DB.SubscriptionTypes.findOne({ where: { id: subscriptionTypeId } });
+      const transaction = await DB.Transactions.create({
+        user_id: userId,
+        phone_number: userPhone,
+        amount: record.amount,
+        checkout_request_id: checkoutRequestID,
+        transaction_reference: record.transactionID || null,
+        status: 'success',
+        payment_status: 'completed',
+        details_id: subscriptionId,
+        response_code: '0',
+        response_description: 'Package purchase successful',
+      });
+      await DB.Subscriptions.update(
+        { transaction_id: transaction.id },
+        { where: { id: subscriptionId } }
+      );
+    } catch (txErr) {
+      console.error('Failed to create transaction record:', txErr);
+    }
+
+    // Send SMS
+    const smsMessage = isNewUser
+      ? `Welcome to BTC! Your account is created. Package: ${packageRecord.name}. Lessons: ${lessonsToAdd}. Username: ${generatedUsername}, Usercode: ${generatedUsercode}`
+      : `Package purchased: ${packageRecord.name}. ${lessonsToAdd} lessons added. Expires: ${expiryDateForLessons.toDateString()}`;
+    try {
+      await sendSms(userPhone, smsMessage);
+    } catch (smsErr) {
+      console.error("SMS sending failed:", smsErr);
+    }
+
+    // Send email
+    if (userEmail) {
+      const emailSubject = isNewUser ? "Welcome to BTC - Account & Package Created" : "BTC Package Purchased";
+      const emailBody = isNewUser
+        ? `<h2>Welcome to BTC!</h2><p>Your account and package have been created.</p><p><strong>Package:</strong> ${packageRecord.name}<br><strong>Lessons:</strong> ${lessonsToAdd}<br><strong>Username:</strong> ${generatedUsername}<br><strong>Usercode:</strong> ${generatedUsercode}</p>`
+        : `<h2>Package Purchased</h2><p><strong>Package:</strong> ${packageRecord.name}</p><p><strong>Lessons added:</strong> ${lessonsToAdd}</p><p><strong>Expires:</strong> ${expiryDateForLessons.toDateString()}</p>`;
+      try {
+        await mailer.sendMail(userEmail, emailSubject, emailBody);
+      } catch (emailErr) {
+        console.error("Email sending failed:", emailErr);
+      }
+    }
+
+    console.log(`Package activated for ${userPhone}, package: ${packageRecord.name}, lessons: ${lessonsToAdd}, userId: ${userId}`);
+    return {
+      success: true,
+      message: "Package activated successfully",
+      checkoutRequestID,
+      packageId: packageRecord.id,
+      packageName: packageRecord.name,
+      phoneNumber: userPhone,
+      username: generatedUsername,
+      usercode: generatedUsercode,
+      expiryDate: expiryDateForLessons.toISOString(),
+      isNewUser,
+      lessonsAdded: lessonsToAdd,
+    };
+  } catch (error) {
+    console.error("Package activation error:", error);
+    return { success: false, error: "Failed to activate package" };
   }
 }
 

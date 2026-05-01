@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { body } from 'express-validator';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
+import DB from '../models/db.js';
 import mpesaService from '../helpers/MpesaService.js';
 
 const router = Router();

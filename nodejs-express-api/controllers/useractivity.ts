@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
+import DB from '../models/db.js';
+import utils from '../helpers/utils.js';
 import { body } from 'express-validator';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
 
 const router = Router();
 
@@ -110,7 +111,7 @@ router.post('/edit/:recid', [
 
 router.get('/delete/:recid', async (req: Request, res: Response) => {
   try {
-    const recid = (req.params.recid || '').split(',');
+    const recid = utils.asString(req.params.recid).split(',');
     const query: any = {};
     const where: any = {};
     where['activity_id'] = recid;

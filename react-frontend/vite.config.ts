@@ -14,6 +14,31 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'react-vendor'
+              }
+              if (id.includes('react-router-dom')) {
+                return 'router-vendor'
+              }
+              if (
+                id.includes('@radix-ui/react-checkbox') ||
+                id.includes('@radix-ui/react-label') ||
+                id.includes('@radix-ui/react-slot') ||
+                id.includes('@radix-ui/react-tabs')
+              ) {
+                return 'ui-vendor'
+              }
+            }
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1000,
+    },
     server: {
       proxy: {
         '/api': {

@@ -34,7 +34,7 @@ function savePayment(payment: GuestLessonPayment): void {
 export function useGuestLessonPayment(phone: string | null, lessonId: number | null) {
   const [isPaid, setIsPaid] = useState(false);
   const [payment, setPayment] = useState<GuestLessonPayment | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, _setIsLoading] = useState(false);
 
   const checkPayment = useCallback(() => {
     if (!phone || !lessonId) {

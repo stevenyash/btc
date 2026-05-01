@@ -4,7 +4,6 @@ import {
   Video, 
   HelpCircle, 
   MessageCircle,
-  ChevronRight,
   Phone,
   Mail,
   ExternalLink
@@ -19,16 +18,6 @@ export default function UserGuidePage() {
       title: "Getting Started",
       icon: BookOpen,
       articles: [
-        {
-          title: "How to Create an Account",
-          description: "Step-by-step guide to registering on Bits Tutor Connect",
-          steps: [
-            "Click on the 'Register' button in the top navigation",
-            "Fill in your details: username, email, phone, and usercode",
-            "Submit the form and check your email for verification",
-            "Login with your usercode to access courses"
-          ]
-        },
         {
           title: "Logging In",
           description: "Access your account securely",
@@ -163,18 +152,13 @@ export default function UserGuidePage() {
                   This guide will help you make the most of our platform. Whether you're a student, 
                   parent, or educator, you'll find step-by-step instructions for every feature.
                 </p>
-                <div className="flex flex-wrap gap-3">
-                  <Button asChild>
-                    <Link to="/register">
-                      Create Account
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline">
-                    <Link to="/contactus">
-                      Contact Support
-                    </Link>
-                  </Button>
-                </div>
+              <div className="flex flex-wrap gap-3">
+                   <Button asChild variant="outline">
+                     <Link to="/contactus">
+                       Contact Support
+                     </Link>
+                   </Button>
+                 </div>
               </CardContent>
             </Card>
 

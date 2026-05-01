@@ -3,7 +3,6 @@ import {
   RefreshCw, 
   Search, 
   Trash2, 
-  X,
   CheckCircle,
   XCircle,
   ChevronLeft,
@@ -45,11 +44,13 @@ export default function InvitesPage() {
   const fetchInvites = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await api.get("/invites", {
-        page: currentPage,
-        limit: 20,
-        search: searchQuery || undefined
-      })
+       const response = await api.get("/invites", {
+         params: {
+           page: currentPage,
+           limit: 20,
+           search: searchQuery || undefined
+         }
+       })
       
       let invitesData: Invite[] = []
       let totalCount = 0

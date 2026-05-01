@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react"
 import { 
-  Users, 
-  Plus, 
   RefreshCw, 
-  Trash2, 
-  X,
   CheckCircle,
   XCircle,
   DollarSign,
@@ -12,8 +8,7 @@ import {
   CreditCard,
   Wallet,
   Gift,
-  Search,
-  ChevronDown
+  Search
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"

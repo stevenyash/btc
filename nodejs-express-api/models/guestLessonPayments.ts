@@ -1,4 +1,4 @@
-import { BaseModel, sequelize } from './basemodel';
+import { BaseModel, sequelize } from './basemodel.js';
 import { Optional, DataTypes, Op } from "sequelize";
 
 type GuestLessonPaymentStatus = 'pending' | 'completed' | 'failed';

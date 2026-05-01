@@ -1,4 +1,4 @@
-import { BaseModel, sequelize, Sequelize } from './basemodel';
+import { BaseModel, sequelize, Sequelize } from './basemodel.js';
 import { Optional, DataTypes } from "sequelize"; 
 type AccessType = 'guest' | 'subscriber' | 'subscriber_resumed' | 'preview';
 type LessonAccessLogStatus = 'active' | 'completed' | 'expired' | 'cancelled';
@@ -39,10 +39,10 @@ class LessonAccessLogs extends BaseModel<LessonAccessLogsAttributes, LessonAcces
 				user_id: { type: DataTypes.INTEGER, allowNull: true },
 				phone: { type: DataTypes.STRING, allowNull: true },
 				lesson_id: { type: DataTypes.INTEGER, allowNull: false },
-				access_type: {
-					type: 'ENUM' as const, values: [],
-					allowNull: false
-				},
+			access_type: {
+				type: DataTypes.ENUM('guest','subscriber','subscriber_resumed','preview'),
+				allowNull: false
+			},
 				ip_address: { type: DataTypes.STRING, allowNull: true },
 				user_agent: { type: DataTypes.TEXT, allowNull: true },
 				session_id: { type: DataTypes.STRING, allowNull: false },
@@ -54,11 +54,11 @@ class LessonAccessLogs extends BaseModel<LessonAccessLogsAttributes, LessonAcces
 				guest_tracker_id: { type: DataTypes.INTEGER, allowNull: true },
 				lesson_track_id: { type: DataTypes.INTEGER, allowNull: true },
 				lesson_setting_id: { type: DataTypes.INTEGER, allowNull: true },
-				status: {
-					type: 'ENUM' as const, values: [],
-					allowNull: false,
-					defaultValue: 'active'
-				}
+			status: {
+				type: DataTypes.ENUM('active','completed','expired','cancelled'),
+				allowNull: false,
+				defaultValue: 'active'
+			}
 			},
 			{
 				sequelize,

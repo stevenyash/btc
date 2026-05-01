@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import DB from '../models/db.js';
+import utils from '../helpers/utils.js';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get('/available-privileges', async (req: Request, res: Response) => {
 
 router.get('/user/:userId', async (req: Request, res: Response) => {
     try {
-        const userId = req.params.userId;
+        const userId = utils.asString(req.params.userId);
         const userIdNum = parseInt(userId);
         
         const user = await (DB.Users as any).findByPk(userIdNum);
@@ -110,7 +111,7 @@ router.post('/revoke', async (req: Request, res: Response) => {
 
 router.post('/revoke-all/:userId', async (req: Request, res: Response) => {
     try {
-        const userId = req.params.userId;
+        const userId = utils.asString(req.params.userId);
         const userIdNum = parseInt(userId);
         
         const result = await (DB.UserPrivileges as any).update(
@@ -127,7 +128,8 @@ router.post('/revoke-all/:userId', async (req: Request, res: Response) => {
 router.get('/check/:userId/:privilege', async (req: Request, res: Response) => {
     try {
         const { userId, privilege } = req.params;
-        const userIdNum = parseInt(userId);
+        const userIdStr = utils.asString(userId);
+        const userIdNum = parseInt(userIdStr);
         
         const priv = await (DB.UserPrivileges as any).findOne({
             where: { user_id: userIdNum, privilege, is_active: true }

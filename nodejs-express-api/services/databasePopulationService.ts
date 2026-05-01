@@ -61,7 +61,6 @@ interface Lesson {
   price: number;
   is_preview_available: boolean;
   preview_duration: number;
-  sort_order: number;
   is_active: boolean;
 }
 
@@ -227,7 +226,6 @@ class DatabasePopulationService {
       level = await DB.LearningLevels.create({
         name: levelName,
         description: `${levelName} Level`,
-        sort_order: await this.getNextSortOrder(DB.LearningLevels),
         is_active: true
       });
       console.log(`Created new level: ${levelName}`);
@@ -249,7 +247,6 @@ class DatabasePopulationService {
         name: gradeName,
         description: `${gradeName} Grade`,
         level_id: levelId,
-        sort_order: await this.getNextSortOrder(DB.Grades),
         is_active: true
       });
       console.log(`Created new grade: ${gradeName}`);
@@ -369,7 +366,6 @@ class DatabasePopulationService {
         price: 0.00,
         is_preview_available: false,
         preview_duration: 0,
-        sort_order: await this.getNextLessonSortOrder(area.id),
         is_active: true
       };
       
@@ -381,23 +377,6 @@ class DatabasePopulationService {
       console.error(`Error creating lesson for file ${s3File.Key}:`, error);
       throw error;
     }
-  }
-
-  async getNextSortOrder(Model: unknown): Promise<number> {
-    const lastItem = await (Model as { findOne: (options: unknown) => unknown }).findOne({
-      order: [['sort_order', 'DESC']]
-    });
-    
-    return ((lastItem as { sort_order?: number })?.sort_order || 0) + 1;
-  }
-
-  async getNextLessonSortOrder(areaId: number): Promise<number> {
-    const lastLesson = await DB.Lessons.findOne({
-      where: { area_id: areaId },
-      order: [['sort_order', 'DESC']]
-    });
-    
-    return ((lastLesson as { sort_order?: number })?.sort_order || 0) + 1;
   }
 
   getRandomColor(): string {

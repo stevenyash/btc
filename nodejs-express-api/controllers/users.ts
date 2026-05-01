@@ -3,7 +3,7 @@ import { body } from 'express-validator';
 import utils from '../helpers/utils.js';
 import uploader from '../helpers/uploader.js';
 import validateFormData from '../helpers/validate_form.js';
-import DB from '../models/db.ts';
+import DB from '../models/db.js';
 
 const router = Router();
 

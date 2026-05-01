@@ -1,5 +1,12 @@
 # React + TypeScript Rules
 
+> **NOTE**: This file is now part of a reorganized rules structure.
+> See `.kilo/rules/README.md` for the complete structure.
+> 
+> Current location: `.kilo/rules/stack/react-typescript.md` (master copy)
+>
+> This file is maintained for backward compatibility.
+
 ## Payments
 Use the reusable `MpesaPaymentModule` component for M-Pesa integrations:
 ```tsx

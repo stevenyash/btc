@@ -1,14 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { Check, Shield, ArrowRight, Users, Clock, Star, Loader2, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import Layout from "@/components/Layout"
-import { useSubscriptionStore } from "@/stores/useSubscriptionStore"
-import { useAuthStore } from "@/stores/useAuthStore"
-import { MpesaPaymentModule } from "@/components/MpesaPaymentModule"
-import { useMpesaStore } from "@/stores/useMpesaStore"
+ import { useState, useEffect } from "react"
+ import { Link, useNavigate } from "react-router-dom"
+ import { Check, Shield, ArrowRight, Users, Clock, Star, Loader2, X } from "lucide-react"
+ import { Button } from "@/components/ui/button"
+ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+ import { Input } from "@/components/ui/input"
+ import { Label } from "@/components/ui/label"
+ import Layout from "@/components/Layout"
+ import { useSubscriptionStore } from "@/stores/useSubscriptionStore"
+ import { useAuthStore } from "@/stores/useAuthStore"
+ import { MpesaPaymentModule } from "@/components/MpesaPaymentModule"
+ import { useMpesaStore } from "@/stores/useMpesaStore"
+ import { formatKenyanPhone } from "@/lib/utils"
 
 const faqs = [
   {
@@ -29,36 +32,57 @@ const faqs = [
   }
 ]
 
-export default function SubscriptionsPage() {
-  const navigate = useNavigate()
-  const { 
-    subscriptionPlans, 
-    isLoading, 
-    error, 
-    fetchSubscriptionPlans
-  } = useSubscriptionStore()
-  const { reset: resetMpesa } = useMpesaStore()
-  const { user } = useAuthStore()
-  
-  const [selectedPlan, setSelectedPlan] = useState<{ id: number; name: string; membership_fee: number } | null>(null)
-  const [showPayment, setShowPayment] = useState(false)
+ export default function SubscriptionsPage() {
+   const navigate = useNavigate()
+   const {
+     subscriptionPlans,
+     isLoading,
+     error,
+     fetchSubscriptionPlans
+   } = useSubscriptionStore()
+   const { reset: resetMpesa } = useMpesaStore()
+   const { user } = useAuthStore()
 
-  useEffect(() => {
-    fetchSubscriptionPlans()
-  }, [])
+   type Plan = { id: number; name: string; description: string | null; membership_fee: number }
 
-  const handleSubscribe = (plan: Plan) => {
-    setSelectedPlan(plan)
-    setShowPayment(true)
-  }
+   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+   const [showPayment, setShowPayment] = useState(false)
+   const [guestDetails, setGuestDetails] = useState<{ email: string; phone: string; name?: string }>({
+     email: "",
+     phone: "",
+     name: ""
+   })
+   const [guestFormStep, setGuestFormStep] = useState(false)
 
-  const handlePaymentSuccess = () => {
-    setShowPayment(false)
-    setSelectedPlan(null)
-    resetMpesa()
-    // Redirect to dashboard
-    navigate("/dashboard")
-  }
+   useEffect(() => {
+     fetchSubscriptionPlans()
+   }, [])
+
+    const handleSubscribe = (plan: Plan) => {
+      setSelectedPlan(plan)
+      setShowPayment(true)
+      if (!user) {
+        setGuestFormStep(true)
+      } else {
+        setGuestFormStep(false)
+      }
+    }
+
+    const handleGuestDetailsSubmit = (e: React.FormEvent) => {
+      e.preventDefault()
+      if (guestDetails.email && guestDetails.phone) {
+        setGuestFormStep(false)
+      }
+    }
+
+   const handlePaymentSuccess = () => {
+     setShowPayment(false)
+     setSelectedPlan(null)
+     setGuestFormStep(false)
+     setGuestDetails({ email: "", phone: "", name: "" })
+     resetMpesa()
+     navigate("/dashboard")
+   }
 
   const handlePaymentFailure = () => {
     // Keep modal open for retry
@@ -67,6 +91,7 @@ export default function SubscriptionsPage() {
   const closePayment = () => {
     setShowPayment(false)
     setSelectedPlan(null)
+    setGuestFormStep(false)
     resetMpesa()
   }
 
@@ -98,9 +123,7 @@ export default function SubscriptionsPage() {
     )
   }
 
-  type Plan = { id: number; name: string; description: string | null; membership_fee: number }
-
-  const displayPlans: Plan[] = Array.isArray(subscriptionPlans) ? subscriptionPlans : []
+   const displayPlans: Plan[] = Array.isArray(subscriptionPlans) ? subscriptionPlans : []
 
   return (
     <Layout>
@@ -235,37 +258,98 @@ export default function SubscriptionsPage() {
         </div>
       </section>
 
-      {/* Payment Modal */}
-      {showPayment && selectedPlan && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="relative w-full max-w-md">
-            <button 
-              onClick={closePayment}
-              className="absolute -top-2 -right-2 z-10 h-8 w-8 bg-white rounded-full flex items-center justify-center shadow-md hover:bg-gray-100"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <MpesaPaymentModule
-              amount={selectedPlan.membership_fee}
-              accountReference={`SUBSCRIPTION_${selectedPlan.id}`}
-              defaultPhone={user?.phone}
-              businessMetadata={{ 
-                activationType: 'subscription',
-                planId: selectedPlan.id, 
-                planName: selectedPlan.name 
-              }}
-              onSuccess={(transaction) => {
-                console.log("Payment successful:", transaction)
-                handlePaymentSuccess()
-              }}
-              onFailure={(error) => {
-                console.log("Payment failed:", error)
-                handlePaymentFailure()
-              }}
-            />
-          </div>
-        </div>
-      )}
+       {/* Payment / Guest Checkout Modal */}
+       {showPayment && selectedPlan && (
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="relative w-full max-w-md">
+              <button
+                onClick={closePayment}
+                className="absolute -top-2 -right-2 z-10 h-8 w-8 bg-white rounded-full flex items-center justify-center shadow-md hover:bg-gray-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+             {guestFormStep ? (
+               <Card>
+                 <CardHeader>
+                   <CardTitle>Complete Your Registration</CardTitle>
+                   <CardDescription>
+                     Enter your email and phone to create your account before payment
+                   </CardDescription>
+                 </CardHeader>
+                 <form onSubmit={handleGuestDetailsSubmit}>
+                   <CardContent className="space-y-4">
+                     <div className="space-y-2">
+                       <Label htmlFor="guestPhone">Phone Number (M-Pesa)</Label>
+                       <Input
+                         id="guestPhone"
+                         type="tel"
+                         placeholder="254XXXXXXXXX"
+                         value={guestDetails.phone}
+                         onChange={(e) => setGuestDetails(prev => ({ ...prev, phone: e.target.value }))}
+                         required
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <Label htmlFor="guestEmail">Email Address</Label>
+                       <Input
+                         id="guestEmail"
+                         type="email"
+                         placeholder="you@example.com"
+                         value={guestDetails.email}
+                         onChange={(e) => setGuestDetails(prev => ({ ...prev, email: e.target.value }))}
+                         required
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <Label htmlFor="guestName">Full Name (optional)</Label>
+                       <Input
+                         id="guestName"
+                         type="text"
+                         placeholder="John Doe"
+                         value={guestDetails.name}
+                         onChange={(e) => setGuestDetails(prev => ({ ...prev, name: e.target.value }))}
+                       />
+                     </div>
+                   </CardContent>
+                    <CardFooter className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={closePayment} className="flex-1">
+                        Cancel
+                      </Button>
+                      <Button type="submit" className="flex-1">
+                        Continue to Payment
+                      </Button>
+                    </CardFooter>
+                 </form>
+               </Card>
+              ) : (
+                <MpesaPaymentModule
+                  amount={selectedPlan.membership_fee}
+                  accountReference={`SUBSCRIPTION_${selectedPlan.id}`}
+                  defaultPhone={user?.phone || formatKenyanPhone(guestDetails.phone)}
+                  businessMetadata={{
+                    activationType: 'subscription',
+                    planId: selectedPlan.id,
+                    planName: selectedPlan.name,
+                    phoneNumber: user?.phone || formatKenyanPhone(guestDetails.phone),
+                    email: user?.email || guestDetails.email,
+                    name: user?.username || guestDetails.name
+                  }}
+                  skipActivation={true}
+                  readonlyPhone={!user}
+                  onSuccess={(transaction) => {
+                    console.log("Payment successful:", transaction)
+                    handlePaymentSuccess()
+                  }}
+                  onFailure={(error) => {
+                    console.log("Payment failed:", error)
+                    handlePaymentFailure()
+                  }}
+                />
+              )}
+           </div>
+         </div>
+       )}
     </Layout>
   )
 }

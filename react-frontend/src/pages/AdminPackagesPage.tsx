@@ -56,14 +56,14 @@ export default function AdminPackagesPage() {
     }
   }
 
-  const fetchSubscriptionTypes = async () => {
-    try {
-      const types = await adminService.getSubscriptionTypes()
-      setSubscriptionTypes(types)
-    } catch (error) {
-      console.error("Failed to fetch subscription types:", error)
-    }
-  }
+   const fetchSubscriptionTypes = async () => {
+     try {
+       const response = await adminService.getSubscriptionTypes()
+       setSubscriptionTypes(response.data)
+     } catch (error) {
+       console.error("Failed to fetch subscription types:", error)
+     }
+   }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()

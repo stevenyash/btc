@@ -247,9 +247,8 @@ class FileUploader {
   }
 
   removeTempFile(tempFilePath: string): void {
-    const tmpDir = (config as any).upload.tempDir;
     const filename = path.basename(tempFilePath);
-    let fullname = path.join(publicDir, tmpDir, filename);
+    let fullname = path.join(publicDir, tempDir, filename);
     if (fs.existsSync(fullname)) {
       fs.unlinkSync(fullname);
     }
@@ -286,7 +285,8 @@ class FileUploader {
   }
 
   upload(fieldName: string): any {
-    this.uploadSettings = (config as any).upload[fieldName];
+    const uploadSettings = uploadConfigs[fieldName] || uploadConfigs.image;
+    this.uploadSettings = uploadSettings;
 
     const storage = multer.diskStorage({
       destination: (req, file, callback) => {
