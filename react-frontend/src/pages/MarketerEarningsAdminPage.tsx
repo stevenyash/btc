@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { 
   RefreshCw, 
   CheckCircle,
@@ -93,94 +93,86 @@ export default function MarketerEarningsAdminPage() {
   const [redemptionTotal, setRedemptionTotal] = useState(0)
   const [redemptionStatus, setRedemptionStatus] = useState<string>("")
 
-  const [settings, setSettings] = useState<CommissionSettings>({
-    default_commission_rate: 0.10,
-    point_value: 10.00,
-    min_withdrawal_amount: 100.00,
-    min_points_redemption: 10
-  })
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+   const [settings, setSettings] = useState<CommissionSettings>({
+     default_commission_rate: 0.10,
+     point_value: 10.00,
+     min_withdrawal_amount: 100.00,
+     min_points_redemption: 10
+   })
+   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
-  useEffect(() => {
-    if (activeTab === "settings") {
-      fetchSettings()
-    } else if (activeTab === "commissions") {
-      fetchCommissions()
-    } else if (activeTab === "withdrawals") {
-      fetchWithdrawals()
-    } else if (activeTab === "redemptions") {
-      fetchRedemptions()
-    }
-  }, [activeTab])
-
-  useEffect(() => {
-    if (activeTab === "commissions") {
-      fetchCommissions()
-    }
-  }, [commissionPage, commissionStatus])
-
-  useEffect(() => {
-    if (activeTab === "withdrawals") {
-      fetchWithdrawals()
-    }
-  }, [withdrawalPage, withdrawalStatus])
-
-  useEffect(() => {
-    if (activeTab === "redemptions") {
-      fetchRedemptions()
-    }
-  }, [redemptionPage, redemptionStatus])
-
-  const fetchSettings = async () => {
-    setIsLoading(true)
+  const fetchSettings = useCallback(async () => {
     try {
       const data = await adminService.getCommissionSettings()
       setSettings(data)
     } catch (error) {
       console.error("Failed to fetch settings:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const fetchCommissions = async () => {
-    setIsLoading(true)
+  const fetchCommissions = useCallback(async (page: number, status: string) => {
     try {
-      const response = await adminService.getMarketerCommissions(commissionPage, 20, commissionStatus || undefined)
+      const response = await adminService.getMarketerCommissions(page, 20, status || undefined)
       setCommissions(response.data)
       setCommissionTotal(response.total)
     } catch (error) {
       console.error("Failed to fetch commissions:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const fetchWithdrawals = async () => {
-    setIsLoading(true)
+  const fetchWithdrawals = useCallback(async (page: number, status: string) => {
     try {
-      const response = await adminService.getMarketerWithdrawals(withdrawalPage, 20, withdrawalStatus || undefined)
+      const response = await adminService.getMarketerWithdrawals(page, 20, status || undefined)
       setWithdrawals(response.data)
       setWithdrawalTotal(response.total)
     } catch (error) {
       console.error("Failed to fetch withdrawals:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const fetchRedemptions = async () => {
-    setIsLoading(true)
+  const fetchRedemptions = useCallback(async (page: number, status: string) => {
     try {
-      const response = await adminService.getMarketerRedemptions(redemptionPage, 20, redemptionStatus || undefined)
+      const response = await adminService.getMarketerRedemptions(page, 20, status || undefined)
       setRedemptions(response.data)
       setRedemptionTotal(response.total)
     } catch (error) {
       console.error("Failed to fetch redemptions:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    setIsLoading(true)
+    if (activeTab === "settings") {
+      fetchSettings().finally(() => setIsLoading(false))
+    } else if (activeTab === "commissions") {
+      fetchCommissions(commissionPage, commissionStatus).finally(() => setIsLoading(false))
+    } else if (activeTab === "withdrawals") {
+      fetchWithdrawals(withdrawalPage, withdrawalStatus).finally(() => setIsLoading(false))
+    } else if (activeTab === "redemptions") {
+      fetchRedemptions(redemptionPage, redemptionStatus).finally(() => setIsLoading(false))
+    }
+  }, [activeTab, fetchSettings, fetchCommissions, fetchWithdrawals, fetchRedemptions, commissionPage, commissionStatus, withdrawalPage, withdrawalStatus, redemptionPage, redemptionStatus])
+
+  useEffect(() => {
+    if (activeTab === "commissions") {
+      setIsLoading(true)
+      fetchCommissions(commissionPage, commissionStatus).finally(() => setIsLoading(false))
+    }
+  }, [commissionPage, commissionStatus, fetchCommissions, activeTab])
+
+  useEffect(() => {
+    if (activeTab === "withdrawals") {
+      setIsLoading(true)
+      fetchWithdrawals(withdrawalPage, withdrawalStatus).finally(() => setIsLoading(false))
+    }
+  }, [withdrawalPage, withdrawalStatus, fetchWithdrawals, activeTab])
+
+  useEffect(() => {
+    if (activeTab === "redemptions") {
+      setIsLoading(true)
+      fetchRedemptions(redemptionPage, redemptionStatus).finally(() => setIsLoading(false))
+    }
+  }, [redemptionPage, redemptionStatus, fetchRedemptions, activeTab])
 
   const handleUpdateSettings = async () => {
     setIsLoading(true)
@@ -197,32 +189,41 @@ export default function MarketerEarningsAdminPage() {
   }
 
   const handleApproveCommission = async (id: number, status: string) => {
+    setIsLoading(true)
     try {
       await adminService.updateMarketerCommission(id, { status })
       toast.success(`Commission ${status}`)
-      fetchCommissions()
+      await fetchCommissions(commissionPage, commissionStatus)
     } catch (error) {
       console.error("Failed to update commission:", error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleApproveWithdrawal = async (id: number, status: string) => {
+    setIsLoading(true)
     try {
       await adminService.updateMarketerWithdrawal(id, { status })
       toast.success(`Withdrawal ${status}`)
-      fetchWithdrawals()
+      await fetchWithdrawals(withdrawalPage, withdrawalStatus)
     } catch (error) {
       console.error("Failed to update withdrawal:", error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleApproveRedemption = async (id: number, status: string) => {
+    setIsLoading(true)
     try {
       await adminService.updateMarketerRedemption(id, { status })
       toast.success(`Redemption ${status}`)
-      fetchRedemptions()
+      await fetchRedemptions(redemptionPage, redemptionStatus)
     } catch (error) {
       console.error("Failed to update redemption:", error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -439,9 +440,16 @@ export default function MarketerEarningsAdminPage() {
                       <option value="approved">Approved</option>
                       <option value="paid">Paid</option>
                     </select>
-                    <Button variant="outline" onClick={fetchCommissions} disabled={isLoading}>
-                      <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                    </Button>
+                     <Button variant="outline" onClick={async () => {
+                       setIsLoading(true)
+                       try {
+                         await fetchCommissions(commissionPage, commissionStatus)
+                       } finally {
+                         setIsLoading(false)
+                       }
+                     }} disabled={isLoading}>
+                       <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                     </Button>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -582,7 +590,14 @@ export default function MarketerEarningsAdminPage() {
                       <option value="completed">Completed</option>
                       <option value="failed">Failed</option>
                     </select>
-                    <Button variant="outline" onClick={fetchWithdrawals} disabled={isLoading}>
+                    <Button variant="outline" onClick={async () => {
+                      setIsLoading(true)
+                      try {
+                        await fetchWithdrawals(withdrawalPage, withdrawalStatus)
+                      } finally {
+                        setIsLoading(false)
+                      }
+                    }} disabled={isLoading}>
                       <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
                     </Button>
                   </div>
@@ -718,7 +733,14 @@ export default function MarketerEarningsAdminPage() {
                       <option value="approved">Approved</option>
                       <option value="rejected">Rejected</option>
                     </select>
-                    <Button variant="outline" onClick={fetchRedemptions} disabled={isLoading}>
+                    <Button variant="outline" onClick={async () => {
+                      setIsLoading(true)
+                      try {
+                        await fetchRedemptions(redemptionPage, redemptionStatus)
+                      } finally {
+                        setIsLoading(false)
+                      }
+                    }} disabled={isLoading}>
                       <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
                     </Button>
                   </div>

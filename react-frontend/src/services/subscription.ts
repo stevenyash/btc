@@ -17,12 +17,13 @@ export interface PackageDetails {
   name: string;
   description: string;
   subscription_type_id: number;
-  // Flattened fields from joined subscription_type (raw: true)
-  'subscription_type.id'?: number;
-  'subscription_type.name'?: string;
-  'subscription_type.description'?: string;
-  'subscription_type.membership_fee'?: number | string;
-  'subscription_type.months'?: string;
+  subscription_type?: {
+    id: number;
+    name: string;
+    description?: string;
+    membership_fee?: number | string;
+    months?: string;
+  };
   concurrent_access: number;
   no_of_lessons: number;
   duration_amount: number;

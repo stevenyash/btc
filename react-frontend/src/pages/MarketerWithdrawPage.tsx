@@ -23,7 +23,7 @@ import { marketerService, type MarketerWithdrawal } from "@/services/marketer"
 export default function MarketerWithdrawPage() {
   const navigate = useNavigate()
   const { earningsSummary, fetchEarningsSummary } = useMarketerStore()
-  
+
   const [isLoading, setIsLoading] = useState(false)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState("")
@@ -32,21 +32,62 @@ export default function MarketerWithdrawPage() {
   const [withdrawStatus, setWithdrawStatus] = useState<"idle" | "pending" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState("")
 
-  useEffect(() => {
-    fetchEarningsSummary()
-    fetchWithdrawalHistory()
-  }, [fetchEarningsSummary])
-
   const fetchWithdrawalHistory = async () => {
-    setIsLoading(true)
     try {
-      const history = await marketerService.getWithdrawalHistory()
-      setWithdrawalHistory(history)
+      const result = await marketerService.getWithdrawalHistory()
+      setWithdrawalHistory(result)
     } catch (error) {
       console.error("Failed to fetch withdrawal history:", error)
-    } finally {
-      setIsLoading(false)
     }
+  }
+
+  const handleWithdraw = async () => {
+    if (!phoneNumber || !withdrawAmount) return
+
+    setIsWithdrawing(true)
+    try {
+      const result = await marketerService.requestWithdrawal(phoneNumber, parseFloat(withdrawAmount))
+
+      if (result.success) {
+        setWithdrawStatus("success")
+        toast.success("Withdrawal initiated successfully! Check your phone for M-Pesa prompt.")
+        try {
+          setIsLoading(true)
+          await Promise.all([
+            fetchEarningsSummary(),
+            fetchWithdrawalHistory()
+          ])
+        } catch (refreshError) {
+          console.error("Failed to refresh data:", refreshError)
+        } finally {
+          setIsLoading(false)
+        }
+      } else {
+        throw new Error(result.error || "Failed to initiate withdrawal")
+      }
+    } catch (error: any) {
+      setWithdrawStatus("error")
+      const errorMsg = error.message || "Failed to initiate withdrawal"
+      setErrorMessage(errorMsg)
+      toast.error(errorMsg)
+    } finally {
+      setIsWithdrawing(false)
+    }
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhoneNumber(e.target.value)
+  }
+
+  const handleMaxAmount = () => {
+    setWithdrawAmount(earningsSummary.pending_earnings.toString())
+  }
+
+  const resetForm = () => {
+    setPhoneNumber("")
+    setWithdrawAmount("")
+    setWithdrawStatus("idle")
+    setErrorMessage("")
   }
 
   const formatCurrency = (value: number) => {
@@ -70,96 +111,30 @@ export default function MarketerWithdrawPage() {
     }
   }
 
-  const formatPhone = (value: string): string => {
-    const cleaned = value.replace(/\D/g, "")
-    if (cleaned.startsWith("254")) {
-      return cleaned
-    }
-    if (cleaned.startsWith("0")) {
-      return "254" + cleaned.substring(1)
-    }
-    return "254" + cleaned
-  }
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhone(e.target.value)
-    setPhoneNumber(formatted)
-  }
-
-  const handleMaxAmount = () => {
-    setWithdrawAmount(earningsSummary.pending_earnings.toString())
-  }
-
-  const handleWithdraw = async () => {
-    if (!phoneNumber || phoneNumber.length < 12) {
-      setErrorMessage("Please enter a valid M-Pesa phone number")
-      return
-    }
-
-    const amount = parseFloat(withdrawAmount)
-    if (isNaN(amount) || amount <= 0) {
-      setErrorMessage("Please enter a valid amount")
-      return
-    }
-
-    if (amount > earningsSummary.pending_earnings) {
-      setErrorMessage("Amount exceeds available pending earnings")
-      return
-    }
-
-    const minWithdrawal = 100
-    if (amount < minWithdrawal) {
-      setErrorMessage(`Minimum withdrawal amount is KES ${minWithdrawal}`)
-      return
-    }
-
-    setIsWithdrawing(true)
-    setErrorMessage("")
-    setWithdrawStatus("pending")
-
-    try {
-      const result = await marketerService.requestWithdrawal(phoneNumber, amount)
-
-      if (result.success) {
-        setWithdrawStatus("success")
-        toast.success("Withdrawal initiated successfully! Check your phone for M-Pesa prompt.")
-        fetchEarningsSummary()
-        fetchWithdrawalHistory()
-      } else {
-        throw new Error(result.error || "Failed to initiate withdrawal")
-      }
-    } catch (error: any) {
-      setWithdrawStatus("error")
-      const errorMsg = error.message || "Failed to initiate withdrawal"
-      setErrorMessage(errorMsg)
-      toast.error(errorMsg)
-    } finally {
-      setIsWithdrawing(false)
-    }
-  }
-
-  const resetForm = () => {
-    setPhoneNumber("")
-    setWithdrawAmount("")
-    setWithdrawStatus("idle")
-    setErrorMessage("")
-  }
-
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (status?.toLowerCase()) {
       case "completed":
       case "success":
-        return "bg-green-100 text-green-800"
+        return "bg-green-500"
       case "pending":
       case "processing":
-        return "bg-yellow-100 text-yellow-800"
+        return "bg-blue-500"
       case "failed":
+      case "rejected":
       case "error":
-        return "bg-red-100 text-red-800"
+        return "bg-red-500"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-500"
     }
   }
+
+  useEffect(() => {
+    setIsLoading(true)
+    Promise.all([
+      fetchEarningsSummary(),
+      fetchWithdrawalHistory()
+    ]).finally(() => setIsLoading(false))
+  }, [fetchEarningsSummary, fetchWithdrawalHistory])
 
   return (
     <Layout>

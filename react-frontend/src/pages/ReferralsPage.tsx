@@ -51,7 +51,6 @@ export default function ReferralsPage() {
   })
 
   const fetchReferrals = useCallback(async () => {
-    setIsLoading(true)
     try {
        const response = await api.get("/invites", {
          params: {
@@ -60,69 +59,70 @@ export default function ReferralsPage() {
            search: searchQuery || undefined
          }
        })
-      
-      let referralsData: Referral[] = []
-      let totalCount = 0
-      
-      if (Array.isArray(response.data)) {
-        referralsData = response.data as Referral[]
-        totalCount = referralsData.length
-      } else if (response.data && typeof response.data === 'object') {
-        const data = response.data as any
-        
-        if (Array.isArray(data.records)) {
-          referralsData = data.records as Referral[]
-          totalCount = data.totalRecords || referralsData.length
-        } else if (Array.isArray(data.data)) {
-          referralsData = data.data as Referral[]
-          totalCount = data.total || referralsData.length
-        } else if (data.id) {
-          referralsData = [data] as Referral[]
-          totalCount = 1
-        }
-      }
-      
-      setReferrals(referralsData)
-      setTotal(totalCount)
-      setTotalPages(Math.ceil(totalCount / 20))
-      
-      const activeCount = referralsData.filter(r => r.status === 'active').length
-      const pendingCount = referralsData.filter(r => r.status === 'pending').length
-      const conversionRate = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0
-      
-      setStats({
-        total: totalCount,
-        active: activeCount,
-        pending: pendingCount,
-        conversionRate
-      })
-    } catch (error: any) {
-      console.error("Failed to fetch referrals:", error)
-      toast.error(`Failed to fetch referrals: ${error.response?.status || 'Network error'}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [currentPage, searchQuery])
+       
+       let referralsData: Referral[] = []
+       let totalCount = 0
+       
+       if (Array.isArray(response.data)) {
+         referralsData = response.data as Referral[]
+         totalCount = referralsData.length
+       } else if (response.data && typeof response.data === 'object') {
+         const data = response.data as any
+         
+         if (Array.isArray(data.records)) {
+           referralsData = data.records as Referral[]
+           totalCount = data.totalRecords || referralsData.length
+         } else if (Array.isArray(data.data)) {
+           referralsData = data.data as Referral[]
+           totalCount = data.total || referralsData.length
+         } else if (data.id) {
+           referralsData = [data] as Referral[]
+           totalCount = 1
+         }
+       }
+       
+       setReferrals(referralsData)
+       setTotal(totalCount)
+       setTotalPages(Math.ceil(totalCount / 20))
+       
+       const activeCount = referralsData.filter(r => r.status === 'active').length
+       const pendingCount = referralsData.filter(r => r.status === 'pending').length
+       const conversionRate = totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0
+       
+       setStats({
+         total: totalCount,
+         active: activeCount,
+         pending: pendingCount,
+         conversionRate
+       })
+     } catch (error: any) {
+       console.error("Failed to fetch referrals:", error)
+       toast.error(`Failed to fetch referrals: ${error.response?.status || 'Network error'}`)
+     }
+   }, [currentPage, searchQuery])
 
-  useEffect(() => {
-    fetchReferrals()
-  }, [fetchReferrals])
+    useEffect(() => {
+      setIsLoading(true)
+      fetchReferrals().finally(() => setIsLoading(false))
+    }, [fetchReferrals])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    fetchReferrals()
   }
 
   const handleDeleteReferral = async (id: number) => {
     if (!confirm("Are you sure you want to delete this referral?")) return
+    setIsLoading(true)
     try {
       await api.get(`/invites/delete/${id}`)
       toast.success("Referral deleted successfully")
-      fetchReferrals()
+      await fetchReferrals()
     } catch (error) {
       console.error("Failed to delete referral:", error)
       toast.error("Failed to delete referral")
+    } finally {
+      setIsLoading(false)
     }
   }
 

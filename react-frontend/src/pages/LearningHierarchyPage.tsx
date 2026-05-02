@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { 
   GraduationCap,
   BookOpen,
@@ -82,7 +82,7 @@ export default function LearningHierarchyPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<any>(null)
-  
+   
   const [levels, setLevels] = useState<LearningLevel[]>([])
   const [grades, setGrades] = useState<Grade[]>([])
   const [areas, setAreas] = useState<LearningArea[]>([])
@@ -91,12 +91,7 @@ export default function LearningHierarchyPage() {
 
   const [formData, setFormData] = useState<any>({})
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
-
-  const fetchAll = async () => {
-    setIsLoading(true)
+  const fetchAll = useCallback(async () => {
     try {
       const [levelsRes, gradesRes, areasRes, topicsRes, subtopicsRes] = await Promise.all([
         adminService.getLearningLevels(),
@@ -112,10 +107,13 @@ export default function LearningHierarchyPage() {
       setSubtopics(subtopicsRes)
     } catch (error) {
       console.error("Failed to fetch hierarchy:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    setIsLoading(true)
+    fetchAll().finally(() => setIsLoading(false))
+  }, [fetchAll])
 
   const handleSave = async () => {
     setIsLoading(true)
@@ -301,7 +299,14 @@ export default function LearningHierarchyPage() {
               </Button>
               <Button 
                 className="bg-primary hover:bg-primary/90 text-white"
-                onClick={fetchAll}
+                onClick={async () => {
+                  setIsLoading(true)
+                  try {
+                    await fetchAll()
+                  } finally {
+                    setIsLoading(false)
+                  }
+                }}
                 disabled={isLoading}
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />

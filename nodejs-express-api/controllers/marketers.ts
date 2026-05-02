@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import utils from '../helpers/utils.js';
 import validateFormData from '../helpers/validate_form.js';
 import DB from '../models/db.js';
+import mailer from '../helpers/mailer.js';
 
 const router = Router();
 
@@ -207,6 +208,24 @@ router.post('/add', [
   try {
     const modeldata = (req as any).getValidFormData();
     const record = await DB.Marketers.create(modeldata);
+    
+    // Send welcome email to newly added marketer
+    try {
+      const emailSubject = "Welcome to BTC Marketer Program!";
+      const emailBody = `
+        <h2>Welcome ${record.firstname} ${record.lastname}!</h2>
+        <p>Thank you for joining the BTC Marketer Program.</p>
+        <p>Your referral code is: <strong>${record.referral_code}</strong></p>
+        <p>You can use this code to refer new users and earn commissions.</p>
+        <p>Best regards,<br/>BTC Team</p>
+      `;
+      
+      await mailer.sendMail(record.email, emailSubject, emailBody);
+    } catch (emailError) {
+      // Log email error but don't fail the marketer creation
+      console.error('Failed to send welcome email:', emailError);
+    }
+    
     return res.json(record);
   } catch (err) { return res.status(500).json({ error: err instanceof Error ? err.message : String(err) }); }
 });

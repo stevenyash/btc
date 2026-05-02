@@ -136,23 +136,29 @@ export const useGuestStore = create<GuestState>()(
         return status;
       },
 
-      checkAllPurchaseStatuses: async (phone: string, lessonIds: number[]) => {
-        const statuses = await guestService.getAllPurchaseStatuses(phone, lessonIds);
-        const statusMap = new Map<number, GuestPurchaseStatus>();
-        statuses.forEach(s => statusMap.set(s.lesson_id, s));
-        set({ purchaseStatuses: statusMap });
-      },
+       checkAllPurchaseStatuses: async (phone: string, lessonIds: number[]) => {
+         try {
+           const statuses = await guestService.getAllPurchaseStatuses(phone, lessonIds);
+           const statusMap = new Map<number, GuestPurchaseStatus>();
+           if (Array.isArray(statuses)) {
+             statuses.forEach(s => statusMap.set(s.lesson_id, s));
+           }
+           set({ purchaseStatuses: statusMap });
+         } catch (error) {
+           console.error("Failed to check purchase statuses:", error);
+         }
+       },
 
       verifyPhone: async (phone: string) => {
         set({ isLoading: true, error: null });
         try {
-          const result = await guestService.verifyPhone(phone);
+          const verified = await guestService.verifyPhone(phone);
           set({ 
-            phone: result.verified ? phone : null, 
-            isVerified: result.verified, 
+            phone: verified ? phone : null, 
+            isVerified: verified, 
             isLoading: false 
           });
-          return result.verified;
+          return verified;
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Failed to verify phone";
           set({ error: message, isLoading: false });

@@ -112,7 +112,7 @@ These rules evolve through use:
 - Payment gateway abstraction (reusable service)
 - Notification service (cross-cutting concern)
 - Generic Table component (reusable UI)
-- useData hook (reusable data fetching)
+- useData hook (reusable data fetching with centralized apiService)
 
 ## ❓ Questions?
 

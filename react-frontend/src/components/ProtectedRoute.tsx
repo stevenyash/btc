@@ -9,7 +9,7 @@ import { Loader2 } from "lucide-react"
 interface ProtectedRouteProps {
   children: React.ReactNode
   requireAuth?: boolean
-  requireRole?: "subscriber" | "marketer" | "admin" | "superadmin"
+  requireRole?: "subscriber" | "marketer" | "admin" | "superadmin" | ("subscriber" | "marketer" | "admin" | "superadmin")[]
   redirectTo?: string
 }
 
@@ -32,7 +32,7 @@ export function ProtectedRoute({
   const userRole = user?.role?.toLowerCase() || user?.role_name?.toLowerCase() || ""
   const isSubscriber = isAuth && (userRole === "subscriber" || userRole === "student")
   const isMarketer = isAuth && userRole === "marketer"
-  const isAdmin = isAuth && (userRole === "admin" || userRole === "superadmin" || userRole === "superuser")
+   const isAdmin = isAuth && (userRole === "admin" || userRole === "superadmin")
 
   // Fetch user data on mount if authenticated but details not loaded
   useEffect(() => {
@@ -63,30 +63,28 @@ export function ProtectedRoute({
     )
   }
 
-  // Redirect to login if authentication required but not authenticated
+// Redirect to login if authentication required but not authenticated
   if (requireAuth && !isAuth) {
     return <Navigate to={redirectTo} state={{ from: location }} replace />
   }
 
   // Role-based access control
-  if (requireRole && isAuth) {
-    switch (requireRole) {
-      case "subscriber":
-        if (!isSubscriber && !isAdmin) {
-          // Allow admins to access subscriber pages? No.
-          return <Navigate to="/" replace />
-        }
-        break
-      case "marketer":
-        if (!isMarketer && !isAdmin) {
-          return <Navigate to="/" replace />
-        }
-        break
-      case "admin":
-        if (!isAdmin) {
-          return <Navigate to="/" replace />
-        }
-        break
+   if (requireRole && isAuth) {
+    const allowedRoles = Array.isArray(requireRole) ? requireRole : [requireRole]
+    const hasRole = allowedRoles.some(role => {
+      switch (role) {
+        case "subscriber":
+          return isSubscriber
+        case "marketer":
+          return isMarketer
+        case "admin":
+          return isAdmin
+        default:
+          return false
+      }
+    })
+    if (!hasRole) {
+      return <Navigate to="/" replace />
     }
   }
 

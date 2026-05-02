@@ -23,6 +23,7 @@ import VideoPlayer from "@/components/VideoPlayer";
 import LessonCard from "@/components/LessonCard";
 import LessonPurchaseModal from "@/components/LessonPurchaseModal";
 import PhoneVerificationCard from "@/components/PhoneVerificationCard";
+import PhoneVerificationModal from "@/components/PhoneVerificationModal";
 
 export default function GoToClassPage() {
   const {
@@ -57,6 +58,8 @@ export default function GoToClassPage() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [purchaseLesson, setPurchaseLesson] = useState<Lesson | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [pendingLesson, setPendingLesson] = useState<Lesson | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -73,22 +76,41 @@ export default function GoToClassPage() {
     setIsVerifying(true);
     setRegisterError(null);
     try {
-      const result = await useGuestStore.getState().verifyPhone(phoneInput);
-      if (result) {
-        localStorage.setItem("guest_phone", phoneInput);
-        useGuestStore.getState().setPhone(phoneInput);
-        useGuestStore.getState().setVerified(true);
-        const lessonIds = selectionHandlers.lessons.map((l) => l.id);
-        if (lessonIds.length > 0) {
-          await useGuestStore.getState().checkAllPurchaseStatuses(phoneInput, lessonIds);
-        }
-      } else {
-        toast.error("Phone number not found. Please register first.");
+      // Just store phone locally for guest session (no DB lookup)
+      localStorage.setItem("guest_phone", phoneInput);
+      useGuestStore.getState().setPhone(phoneInput);
+      useGuestStore.getState().setVerified(true);
+
+      // Check purchase statuses (empty for new phone)
+      const lessonIds = selectionHandlers.lessons.map((l) => l.id).filter(id => id);
+      if (lessonIds.length > 0) {
+        await useGuestStore.getState().checkAllPurchaseStatuses(phoneInput, lessonIds);
       }
-    } catch (error) {
+
+      // Handle pending lesson from modal
+      if (pendingLesson) {
+        setShowPhoneModal(false);
+        const status = purchaseStatuses.get(pendingLesson.id);
+        if (!status?.purchased) {
+          setPurchaseLesson(pendingLesson);
+          setShowPurchaseModal(true);
+        } else {
+          setSelectedLesson(pendingLesson);
+        }
+        setPendingLesson(null);
+      }
+    } catch (error: any) {
       console.error("Verification error:", error);
+      setRegisterError(error.message || "Operation failed");
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handlePhoneModalChange = (open: boolean) => {
+    setShowPhoneModal(open);
+    if (!open) {
+      setPendingLesson(null);
     }
   };
 
@@ -122,16 +144,17 @@ export default function GoToClassPage() {
     localStorage.removeItem("guest_phone");
   };
 
-  const handleWatchLesson = (lesson: Lesson) => {
+   const handleWatchLesson = (lesson: Lesson) => {
     // Subscriber path
     if (isAuthenticated && hasActiveSubscription) {
       setSelectedLesson(lesson);
       return;
     }
 
-    // Guest path
+    // Guest path - check verification
     if (!phone || !isVerified) {
-      toast.error("Please verify your phone number first.");
+      setPendingLesson(lesson);
+      setShowPhoneModal(true);
       return;
     }
     const status = purchaseStatuses.get(lesson.id);
@@ -208,16 +231,26 @@ export default function GoToClassPage() {
         />
       )}
 
-      <LessonPurchaseModal
-        open={showPurchaseModal}
-        onClose={() => setShowPurchaseModal(false)}
-        lesson={purchaseLesson}
-        isSubscriber={false}
-        phone={phone}
-        userPhone={null}
-        lessonFees={lessonFees}
-        onPurchaseComplete={handlePurchaseComplete}
-      />
+       <LessonPurchaseModal
+         open={showPurchaseModal}
+         onClose={() => setShowPurchaseModal(false)}
+         lesson={purchaseLesson}
+         isSubscriber={false}
+         phone={phone}
+         userPhone={null}
+         lessonFees={lessonFees}
+         onPurchaseComplete={handlePurchaseComplete}
+       />
+
+       <PhoneVerificationModal
+         open={showPhoneModal}
+         onOpenChange={handlePhoneModalChange}
+         phoneInput={phoneInput}
+         onPhoneChange={setPhoneInput}
+         isVerifying={isVerifying}
+         onVerify={handleVerifyPhone}
+         registerError={registerError}
+       />
 
       {/* Main page content (hidden during video playback) */}
       {!selectedLesson && (

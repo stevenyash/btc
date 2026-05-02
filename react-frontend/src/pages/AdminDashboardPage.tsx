@@ -99,42 +99,18 @@ export default function AdminDashboardPage() {
                 Manage users, subscriptions, and monitor platform activity
               </p>
             </div>
-            {isSuperadmin && (
-              <div className="flex gap-2">
-                <Button 
-                  variant="secondary"
-                  className="bg-amber-500 hover:bg-amber-600 text-white"
-                  onClick={() => navigate("/admin/roles")}
-                >
-                  <Shield className="mr-2 h-4 w-4" />
-                  Roles & Permissions
-                </Button>
+             {isSuperadmin && (
+               <div className="flex gap-2">
                  <Button 
                    variant="secondary"
-                   className="bg-purple-500 hover:bg-purple-600 text-white"
-                   onClick={() => navigate("/admin/bunny-sync")}
+                   className="bg-amber-500 hover:bg-amber-600 text-white"
+                   onClick={() => navigate("/admin/roles")}
                  >
-                   <Video className="mr-2 h-4 w-4" />
-                   Bunny Sync
+                   <Shield className="mr-2 h-4 w-4" />
+                   Roles & Permissions
                  </Button>
-                 <Button 
-                   variant="secondary"
-                   className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                   onClick={() => navigate("/admin/bunny-upload")}
-                 >
-                   <Upload className="mr-2 h-4 w-4" />
-                   Upload Videos
-                 </Button>
-                 <Button 
-                   variant="secondary"
-                   className="bg-orange-500 hover:bg-orange-600 text-white"
-                   onClick={() => navigate("/admin/bunny-migrate")}
-                 >
-                   <RefreshCw className="mr-2 h-4 w-4" />
-                   Migrate S3 → Bunny
-                 </Button>
-              </div>
-            )}
+               </div>
+             )}
           </div>
         </div>
       </section>
@@ -458,24 +434,27 @@ export default function AdminDashboardPage() {
                           Manage Marketers
                         </Button>
                       </WithPermission>
-                      <WithPermission permission="lessons.list">
-                        <Button 
-                          className="w-full justify-start" 
-                          variant="outline"
-                          onClick={() => navigate("/admin/lessons")}
-                        >
-                          <Video className="mr-2 h-4 w-4" />
-                          Manage Lessons
-                        </Button>
-                      </WithPermission>
-                      <Button 
-                        className="w-full justify-start" 
-                        variant="outline"
-                        onClick={() => navigate("/weekend-tutorials")}
-                      >
-                        <BarChart3 className="mr-2 h-4 w-4" />
-                        Tutorials
-                      </Button>
+                       <WithPermission permission="lessons.list">
+                          <Button 
+                            className="w-full justify-start" 
+                            variant="outline"
+                            onClick={() => navigate("/admin/lessons")}
+                          >
+                            <Video className="mr-2 h-4 w-4" />
+                            Manage Lessons
+                          </Button>
+                        </WithPermission>
+                        <WithPermission permission="lessons.store">
+                          <Button 
+                            className="w-full justify-start" 
+                            variant="outline"
+                            onClick={() => navigate("/admin/bunny-upload")}
+                          >
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload Videos
+                          </Button>
+                        </WithPermission>
+                        {/* Tutorials removed - not an admin function */}
                     </CardContent>
                   </Card>
 

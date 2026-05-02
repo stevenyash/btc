@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { 
   CreditCard, 
   RefreshCw, 
@@ -25,35 +25,38 @@ import { CanI } from "@/components/CanI"
 export default function AdminTransactionsPage() {
   const navigate = useNavigate()
   const [transactions, setTransactions] = useState<RecentTransaction[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [filterStatus, setFilterStatus] = useState("")
   const [totalAmount, setTotalAmount] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+
+   const fetchTransactions = useCallback(async (page: number, status: string) => {
+     try {
+       const response = await adminService.getTransactions(page, 20)
+       // Filter transactions by status if provided
+       let filteredData = response.data
+       if (status) {
+         filteredData = response.data.filter(t => t.status?.toLowerCase() === status.toLowerCase())
+       }
+       setTransactions(filteredData)
+       setTotal(response.total)
+       setTotalPages(Math.ceil(response.total / 20))
+       
+       const total = filteredData.reduce((sum, t) => sum + (t.amount || 0), 0)
+       setTotalAmount(total)
+     } catch (error) {
+       console.error("Failed to fetch transactions:", error)
+       toast.error("Failed to fetch transactions")
+     }
+   }, [])
 
   useEffect(() => {
-    fetchTransactions()
-  }, [currentPage, filterStatus])
-
-  const fetchTransactions = async () => {
     setIsLoading(true)
-    try {
-      const response = await adminService.getTransactions(currentPage, 20)
-      setTransactions(response.data)
-      setTotal(response.total)
-      setTotalPages(Math.ceil(response.total / 20))
-      
-      const total = response.data.reduce((sum, t) => sum + (t.amount || 0), 0)
-      setTotalAmount(total)
-    } catch (error) {
-      console.error("Failed to fetch transactions:", error)
-      toast.error("Failed to fetch transactions")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    fetchTransactions(currentPage, filterStatus).finally(() => setIsLoading(false))
+  }, [currentPage, filterStatus, fetchTransactions])
 
   const handleRefundTransaction = async (id: number) => {
     if (!confirm("Are you sure you want to refund this transaction?")) return
@@ -61,7 +64,7 @@ export default function AdminTransactionsPage() {
     setIsLoading(true)
     try {
       await adminService.updateTransaction(id, { status: "refunded" })
-      fetchTransactions()
+      fetchTransactions(currentPage, filterStatus)
       toast.success("Transaction refunded successfully")
     } catch (error) {
       console.error("Failed to refund transaction:", error)
@@ -77,7 +80,7 @@ export default function AdminTransactionsPage() {
     setIsLoading(true)
     try {
       await adminService.deleteTransaction(id)
-      fetchTransactions()
+      fetchTransactions(currentPage, filterStatus)
       toast.success("Transaction deleted successfully")
     } catch (error) {
       console.error("Failed to delete transaction:", error)
@@ -157,7 +160,14 @@ export default function AdminTransactionsPage() {
               <Button 
                 variant="outline" 
                 className="bg-white text-slate-800 hover:bg-slate-100"
-                onClick={fetchTransactions}
+                onClick={async () => {
+                  setIsLoading(true)
+                  try {
+                    await fetchTransactions(currentPage, filterStatus)
+                  } finally {
+                    setIsLoading(false)
+                  }
+                }}
                 disabled={isLoading}
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
  import { useState, useEffect } from "react"
  import { Link, useNavigate } from "react-router-dom"
  import { Check, Shield, ArrowRight, Users, Clock, Star, Loader2, X } from "lucide-react"

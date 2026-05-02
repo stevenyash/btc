@@ -160,19 +160,46 @@ export function Header({
         </nav>
 
         {/* Right Side - Auth */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {isLoggedIn ? (
             <>
+              {/* Logout Button - Always visible for easy access */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive hidden sm:flex"
+                onClick={async () => {
+                  await logout()
+                  navigate("/")
+                }}
+              >
+                <LogOut className="mr-1 h-4 w-4" />
+                <span className="hidden md:inline">Logout</span>
+              </Button>
+
+              {/* Logout Button - Icon only for small screens */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive hover:text-destructive sm:hidden"
+                onClick={async () => {
+                  await logout()
+                  navigate("/")
+                }}
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+
               {/* User Menu Dropdown */}
               <div className="relative">
                 <Button
                   variant="ghost"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-1 md:gap-2"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                 >
                   <UserCircle className="h-5 w-5" />
-                  <span className="hidden sm:inline capitalize">{userName || "User"}</span>
-                  <ChevronDown className="h-4 w-4" />
+                  <span className="hidden sm:inline capitalize text-sm">{userName || "User"}</span>
+                  <ChevronDown className="h-4 w-4 hidden sm:inline" />
                 </Button>
 
                 {userMenuOpen && (
@@ -221,9 +248,10 @@ export function Header({
                           Change usercode
                         </Link>
                       </Button>
+                      <div className="border-t my-1 sm:hidden" />
                       <Button
                         variant="ghost"
-                        className="w-full justify-start text-destructive hover:text-destructive"
+                        className="w-full justify-start text-destructive hover:text-destructive sm:hidden"
                         onClick={async () => {
                           await logout()
                           navigate("/")
@@ -239,10 +267,10 @@ export function Header({
             </>
           ) : (
             <>
-              {/* Login Button */}
-              <Button variant="ghost" asChild>
+              {/* Login Button - Prominent on mobile */}
+              <Button variant="default" size="sm" className="flex items-center gap-1" asChild>
                 <Link to="/login">
-                  <LogIn className="mr-1 md:mr-2 h-4 w-4" />
+                  <LogIn className="h-4 w-4" />
                   <span className="hidden sm:inline">Login</span>
                 </Link>
               </Button>

@@ -5,11 +5,11 @@ export function useRole() {
   
   const userRole = user?.role?.toLowerCase() || user?.role_name?.toLowerCase() || "";
   
-  const isAdmin = userRole === "admin" || userRole === "superadmin" || userRole === "superuser";
-  const isSub = userRole === "subscriber" || userRole === "student" || userRole === "client";
-  const isMarketer = userRole === "marketer";
-  const isTeacher = userRole === "teacher";
-  const isSuperadmin = userRole === "superadmin" || userRole === "superuser";
+   const isAdmin = userRole === "admin" || userRole === "superadmin";
+   const isSub = userRole === "subscriber" || userRole === "student" || userRole === "client";
+   const isMarketer = userRole === "marketer";
+   const isTeacher = userRole === "teacher";
+   const isSuperadmin = userRole === "superadmin";
 
   return {
     isAdmin,

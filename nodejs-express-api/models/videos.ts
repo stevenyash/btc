@@ -15,6 +15,7 @@ interface VideosAttributes {
 	file_size: number | null;
 	uploaded_at: Date | null;
 	upload_error: string | null;
+	lesson_id: number | null;
 }
 
 interface VideosCreationAttributes
@@ -40,7 +41,8 @@ class Videos extends BaseModel<VideosAttributes, VideosCreationAttributes> {
 				s3_url: { type: DataTypes.STRING(500) },
 				file_size: { type: DataTypes.BIGINT },
 				uploaded_at: { type: DataTypes.DATE },
-				upload_error: { type: DataTypes.TEXT }
+				upload_error: { type: DataTypes.TEXT },
+				lesson_id: { type: DataTypes.INTEGER, allowNull: true }
 			},
 			{
 				sequelize,
@@ -51,15 +53,15 @@ class Videos extends BaseModel<VideosAttributes, VideosCreationAttributes> {
 	}
 
 	static listFields(): string[] {
-		return ["id", "file", "collection", "visibility", "filename", "status", "description", "category", "title", "s3_key", "s3_url", "file_size", "uploaded_at", "upload_error"];
+		return ["id", "file", "collection", "visibility", "filename", "status", "description", "category", "title", "s3_key", "s3_url", "file_size", "uploaded_at", "upload_error", "lesson_id"];
 	}
 
 	static viewFields(): string[] {
-		return ["id", "file", "collection", "visibility", "filename", "status", "description", "category", "title", "s3_key", "s3_url", "file_size", "uploaded_at", "upload_error"];
+		return ["id", "file", "collection", "visibility", "filename", "status", "description", "category", "title", "s3_key", "s3_url", "file_size", "uploaded_at", "upload_error", "lesson_id"];
 	}
 
 	static editFields(): string[] {
-		return ["filename", "title", "file", "collection", "visibility", "status", "category", "description", "s3_key", "s3_url", "file_size", "uploaded_at", "upload_error", "id"];
+		return ["filename", "title", "file", "collection", "visibility", "status", "category", "description", "s3_key", "s3_url", "file_size", "uploaded_at", "upload_error", "lesson_id", "id"];
 	}
 
 	static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {

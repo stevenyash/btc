@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { authService, tokenService, type User, type LoginData } from "@/services/auth";
+import { authService, type User, type LoginData } from "@/services/auth";
 import { useSubscriptionStore } from "./useSubscriptionStore";
 
 interface AuthState {
@@ -48,7 +48,6 @@ export const useAuthStore = create<AuthState>()(
           const subscriptionStore = useSubscriptionStore.getState();
           await subscriptionStore.fetchSubscriberDetails();
         } catch (error: unknown) {
-          // Extract error message from axios response
           let message = "Login failed";
           if (error && typeof error === "object" && "response" in error) {
             const axiosError = error as { response?: { data?: { error?: string } } };
@@ -71,7 +70,6 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error("Logout error:", error);
         } finally {
-          tokenService.removeToken();
           // Clear subscription data on logout
           const subscriptionStore = useSubscriptionStore.getState();
           subscriptionStore.clearSubscription();
@@ -87,15 +85,8 @@ export const useAuthStore = create<AuthState>()(
 
       getCurrentUser: async (forceRefresh = false) => {
         const currentUser = get().user;
-        
-        // If user exists and has role, and not forcing refresh, skip
-        if (!forceRefresh && currentUser?.role_name) return;
 
-        const token = tokenService.getToken();
-        if (!token) {
-          set({ isAuthenticated: false, user: null });
-          return;
-        }
+        if (!forceRefresh && currentUser?.role_name) return;
 
         set({ isLoading: true });
         try {
@@ -108,7 +99,6 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Failed to get user";
-          tokenService.removeToken();
           set({
             error: message,
             isLoading: false,
@@ -118,51 +108,50 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-  forgotusercode: async (email) => {
-    set({ isLoading: true, error: null });
-    try {
-      await authService.forgotusercode(email);
-      set({ isLoading: false });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to send reset email";
-      set({
-        error: message,
-        isLoading: false,
-      });
-      throw error;
-    }
-  },
+      forgotusercode: async (email) => {
+        set({ isLoading: true, error: null });
+        try {
+          await authService.forgotusercode(email);
+          set({ isLoading: false });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Failed to send reset email";
+          set({
+            error: message,
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
 
-  changeUsercode: async (currentUsercode: string, newUsercode: string, confirmUsercode: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      await authService.changeUsercode(currentUsercode, newUsercode, confirmUsercode);
-      set({ isLoading: false });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to change usercode";
-      set({
-        error: message,
-        isLoading: false,
-      });
-      throw error;
-    }
-  },
+      changeUsercode: async (currentUsercode: string, newUsercode: string, confirmUsercode: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          await authService.changeUsercode(currentUsercode, newUsercode, confirmUsercode);
+          set({ isLoading: false });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Failed to change usercode";
+          set({
+            error: message,
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
 
-  updateProfile: async (data: Partial<User>) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await authService.updateProfile(data);
-      // Update user in store
-      set({ user: { ...get().user, ...response } as User, isLoading: false });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to update profile";
-      set({
-        error: message,
-        isLoading: false,
-      });
-      throw error;
-    }
-  },
+      updateProfile: async (data: Partial<User>) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authService.updateProfile(data);
+          set({ user: { ...get().user, ...response } as User, isLoading: false });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Failed to update profile";
+          set({
+            error: message,
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
 
       resetusercode: async (token, usercode, confirmusercode) => {
         set({ isLoading: true, error: null });
@@ -181,15 +170,15 @@ export const useAuthStore = create<AuthState>()(
 
       clearError: () => set({ error: null }),
 
-      hasRole: (roleName: string) => {
-        const { user } = get();
-        if (!user) return false;
-        const userRole = user.role?.toLowerCase() || user.role_name?.toLowerCase();
-        return userRole === roleName.toLowerCase() || 
-               (roleName === "admin" && (userRole === "admin" || userRole === "superuser" || userRole === "superadmin")) ||
-               (roleName === "subscriber" && (userRole === "subscriber" || userRole === "student")) ||
-               (roleName === "marketer" && userRole === "marketer");
-      },
+       hasRole: (roleName: string) => {
+         const { user } = get();
+         if (!user) return false;
+         const userRole = user.role?.toLowerCase() || user.role_name?.toLowerCase();
+         return userRole === roleName.toLowerCase() ||
+                (roleName === "admin" && (userRole === "admin" || userRole === "superadmin")) ||
+                (roleName === "subscriber" && (userRole === "subscriber" || userRole === "student")) ||
+                (roleName === "marketer" && userRole === "marketer");
+       },
 
       hasPermission: (permission: string) => {
         const { user, permissions } = get();
@@ -204,8 +193,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       refreshUser: async () => {
-        const token = tokenService.getToken();
-        if (!token) return;
         set({ isLoading: true });
         try {
           const user = await authService.getCurrentUser();
@@ -215,7 +202,6 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
           });
         } catch {
-          tokenService.removeToken();
           set({
             isLoading: false,
             isAuthenticated: false,

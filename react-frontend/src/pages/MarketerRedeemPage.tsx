@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   Star,
   ArrowLeft,
@@ -31,22 +31,22 @@ export default function MarketerRedeemPage() {
   const [redeemStatus, setRedeemStatus] = useState<"idle" | "pending" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState("")
 
-  useEffect(() => {
-    fetchEarningsSummary()
-    fetchRedemptionHistory()
-  }, [fetchEarningsSummary])
-
-  const fetchRedemptionHistory = async () => {
-    setIsLoading(true)
+  const fetchRedemptionHistory = useCallback(async () => {
     try {
       const history = await marketerService.getRedemptionHistory()
       setRedemptionHistory(history)
     } catch (error) {
       console.error("Failed to fetch redemption history:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    setIsLoading(true)
+    Promise.all([
+      fetchEarningsSummary(),
+      fetchRedemptionHistory()
+    ]).finally(() => setIsLoading(false))
+  }, [fetchEarningsSummary, fetchRedemptionHistory])
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-KE", {
@@ -106,8 +106,17 @@ export default function MarketerRedeemPage() {
       if (result.success) {
         setRedeemStatus("success")
         toast.success("Points redemption request submitted! Awaiting admin approval.")
-        fetchEarningsSummary()
-        fetchRedemptionHistory()
+        try {
+          setIsLoading(true)
+          await Promise.all([
+            fetchEarningsSummary(),
+            fetchRedemptionHistory()
+          ])
+        } catch (refreshError) {
+          console.error("Failed to refresh data:", refreshError)
+        } finally {
+          setIsLoading(false)
+        }
       } else {
         throw new Error(result.error || "Failed to submit redemption request")
       }

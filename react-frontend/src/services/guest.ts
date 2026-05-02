@@ -50,8 +50,6 @@ export interface GuestPurchaseStatus {
 export interface GuestRegisterResponse {
   success: boolean;
   message?: string;
-  is_new?: boolean;
-  verified?: boolean;
 }
 
 export interface StreamUrlResponse {
@@ -186,9 +184,12 @@ export const guestService = {
     });
   },
 
-  async verifyPhone(phone: string): Promise<{ verified: boolean; isNew: boolean }> {
+  async verifyPhone(phone: string): Promise<boolean> {
     const response = await publicApi.get(`/components_data/verify_phone/${phone}`);
-    return response.data || { verified: false, isNew: false };
+    const data = response.data;
+    // verified: true means phone is available for guest access
+    // isRegisteredUser: true means phone belongs to existing user (should log in)
+    return data?.verified === true;
   },
 
   async getLessonFees(): Promise<{ subscribed: { fee: number; duration: number }; non_subscribed: { fee: number; duration: number } }> {

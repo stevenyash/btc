@@ -7,7 +7,16 @@ export default function () {
   const ExtractJwt = PassportJwt.ExtractJwt;
 
   const opts: any = {};
-  opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
+  // Support both Authorization header bearer token AND httpOnly cookie
+  opts.jwtFromRequest = (req: any) => {
+    // Try Authorization header first
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      return authHeader.substring(7);
+    }
+    // Fallback to httpOnly cookie
+    return req.cookies?.jwt;
+  };
   opts.secretOrKey = process.env.AUTH_API_TOKEN_SECRET;
   opts.algorithms = ['HS256'];
 

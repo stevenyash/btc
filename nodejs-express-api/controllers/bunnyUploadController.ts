@@ -21,6 +21,13 @@ const getTempDir = (): string => {
 
 const TEMP_DIR = getTempDir();
 
+// Ensure temp directory exists
+try {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+} catch (err) {
+  console.warn(`Could not create temp directory ${TEMP_DIR}:`, err);
+}
+
 // Configure multer for memory storage (file buffer)
 const storage = multer.memoryStorage();
 const upload = multer({

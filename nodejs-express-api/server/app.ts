@@ -5,6 +5,7 @@ import { createMiddleware } from './config/middleware.js';
 import { setupRoutes } from './routes/index.js';
 import { initializeDatabase } from './config/database.js';
 import logger from '../helpers/logger.js';
+import { csrfProtection } from '../middleware/csrf.js';
 
 const app: Express = express();
 
@@ -15,6 +16,10 @@ app.set('view engine', 'ejs');
 
 // Setup middleware
 createMiddleware(app);
+
+// CSRF protection for state-changing operations
+// Applied BEFORE auth middleware to validate before processing
+app.use('/api', csrfProtection);
 
 // Auth middleware for all /api routes
 app.use("/api/", authMiddleware);

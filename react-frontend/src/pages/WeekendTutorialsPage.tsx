@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { useState, useEffect } from "react"
 import { Calendar, Users, BookOpen, Video, MapPin, Phone, Mail, CheckCircle, Loader2, RefreshCw, MessageSquare, VideoIcon, Clock } from "lucide-react"
 import { toast } from "sonner"

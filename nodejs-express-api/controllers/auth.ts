@@ -10,6 +10,7 @@ import { generateCsrfToken } from '../middleware/csrf.js';
 import { authLimiter } from '../middleware/rateLimiters.js';
 import DB from '../models/db.js';
 import TokenBlacklist from '../models/token_blacklist.js';
+import { setAuthCookie, setCsrfCookie, clearAuthCookie } from '../helpers/cookieUtils.js';
 
 const router = Router();
 
@@ -59,8 +60,35 @@ router.post('/login', [
       return res.json({ nextpage });
     }
 
-    const loginData = await getUserLoginData(user, res);
-    return res.json(loginData);
+    // Generate tokens
+    const expiresIn = `${process.env.AUTH_JWT_DURATION || '30'}m`;
+    const userid = user.id;
+    const jti = crypto.randomUUID();
+    const token = jwt.sign(
+      { sub: userid, jti },
+      process.env.AUTH_API_TOKEN_SECRET || '',
+      { expiresIn, algorithm: 'HS256' }
+    );
+
+    // Set JWT as httpOnly cookie
+    setAuthCookie(res, token);
+
+    // Generate and set CSRF token
+    const csrfToken = generateCsrfToken();
+    setCsrfCookie(res, csrfToken);
+
+    // Return success (no token in body)
+    return res.json({
+      success: true,
+      message: 'Logged in successfully',
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        role_id: user.user_role_id,
+      }
+    });
   } catch (err) {
     console.log("login" ,err);
     const message = err instanceof Error ? err.message : String(err);
@@ -68,60 +96,80 @@ router.post('/login', [
   }
 });
 
-router.post('/forgotusercode', [
-  body('email').not().isEmpty().isEmail(),
-], validateFormData as any, async (req: Request, res: Response) => {
-  try {
-    const modeldata = (req as any).getValidFormData();
-    const email = modeldata.email;
+ router.post('/forgotusercode', [
+   body('email').not().isEmpty().isEmail(),
+ ], validateFormData as any, async (req: Request, res: Response) => {
+   try {
+     const modeldata = (req as any).getValidFormData();
+     const email = modeldata.email;
 
-    const user: User | null = await DB.Users.findOne({ where: { email: email } });
+     // Find any registered user with this email
+     const user: User | null = await DB.Users.findOne({ 
+       where: { email: email }
+     });
 
-    if (user) {
-      await sendusercodeResetLink(user);
-    }
-    return res.json({ message: "If that email exists, we have sent a reset link" });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: message });
-  }
-});
+     if (user) {
+       await sendusercodeResetLink(user);
+     }
+     
+     return res.json({ message: "If that email exists, we have sent a reset link" });
+   } catch (err) {
+     const message = err instanceof Error ? err.message : String(err);
+     return res.status(500).json({ error: message });
+   }
+ });
 
-router.post('/resetusercode', [
-  body('usercode').not().isEmpty().custom((val: string, { req }: any) => {
-    if (val !== (req as any).body.confirm_usercode) {
-      throw new Error("usercodes confirmation does not match");
-    } else {
-      return val;
-    }
-  }),
-], validateFormData as any, async (req: Request, res: Response) => {
-  try {
-    const token = req.body.token;
-    const userid = getUserIDFromJwt(token);
-    const usercode = req.body.usercode;
+  router.post('/resetusercode', [
+   body('usercode').not().isEmpty().custom((val: string, { req }: any) => {
+     if (val !== (req as any).body.confirm_usercode) {
+       throw new Error("usercodes confirmation does not match");
+     } else {
+       return val;
+     }
+   }),
+ ], validateFormData as any, async (req: Request, res: Response) => {
+   try {
+     const token = req.body.token;
+     const userid = getUserIDFromJwt(token);
+     const usercode = req.body.usercode;
 
-    const where = { id: userid };
-    const record: User | null = await DB.Users.findOne({ where: where });
+     const where = { id: userid };
+     const record: User | null = await DB.Users.findOne({ 
+       where: where,
+       include: [{ model: DB.Roles, as: 'roles', attributes: ['role_name'] }]
+     });
 
-    if (!record) {
-      return res.status(404).json({ error: "User not found" });
-    }
+     if (!record) {
+       return res.status(404).json({ error: "User not found" });
+     }
 
-    const newusercode = utils.usercodeHash(usercode);
-    const modeldata = { usercode: newusercode };
+     const userRole = (record as any).roles?.role_name;
+     
+     const newusercode = utils.usercodeHash(usercode);
+     const modeldata = { usercode: newusercode };
 
-    await DB.Users.update(modeldata, { where: where });
-    return res.json({ message: "usercode changed" });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: message });
-  }
-});
+     await DB.Users.update(modeldata, { where: where });
+
+     // Only subscribers receive a confirmation email with the new usercode
+     if (userRole === 'Subscriber') {
+       try {
+         await sendUsercodeResetConfirmation(record.username, record.email, usercode);
+       } catch (emailErr) {
+         console.error("Failed to send confirmation email:", emailErr);
+         // Don't fail the request if email fails
+       }
+     }
+
+     return res.json({ message: "usercode changed" });
+   } catch (err) {
+     const message = err instanceof Error ? err.message : String(err);
+     return res.status(500).json({ error: message });
+   }
+ });
 
 router.post('/logout', async (req: Request, res: Response) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const token = req.cookies?.jwt || req.headers.authorization?.replace('Bearer ', '');
     if (token) {
       try {
         const decoded: any = jwt.verify(token, process.env.AUTH_API_TOKEN_SECRET || '', {
@@ -136,6 +184,11 @@ router.post('/logout', async (req: Request, res: Response) => {
         }
       } catch (e) {}
     }
+
+    // Clear cookies
+    const { clearAuthCookie } = await import('../helpers/cookieUtils.js');
+    clearAuthCookie(res);
+
     return res.json({ message: 'Logged out successfully' });
   } catch (err) {
     return res.status(500).json({ error: 'Logout failed' });
@@ -152,9 +205,11 @@ router.post('/logout-all', async (req: Request, res: Response) => {
 });
 
 router.get('/csrf-token', (req: Request, res: Response) => {
-  const token = generateCsrfToken();
-  const sessionId = crypto.randomUUID();
-  res.json({ csrfToken: token, sessionId });
+  const csrfToken = generateCsrfToken();
+  // Set CSRF token as accessible cookie (frontend reads and sends back)
+  setCsrfCookie(res, csrfToken);
+  // Return token in response for immediate use
+  res.json({ csrfToken });
 });
 
 router.get('/me', async (req: Request, res: Response) => {
@@ -325,15 +380,24 @@ router.post('/change-usercode', [
    }
 });
 
-async function sendusercodeResetLink(user: User): Promise<boolean> {
-  const token = generateUserToken(user);
-  const resetlink = `${process.env.APP_FRONTEND_URL || 'http://localhost:5173'}/#/index/resetusercode?token=${token}`;
-  const username = user.username;
-  const email = user.email;
-  const mailtitle = 'usercode Reset';
-  
-  const viewData = { username, email, resetlink };
-  const mailbody = await ejs.renderFile("views/pages/index/usercode_reset_email_template.ejs", viewData);
+ async function sendusercodeResetLink(user: User): Promise<boolean> {
+   const token = generateUserToken(user);
+    const resetlink = `${process.env.APP_FRONTEND_URL || 'http://localhost:5173'}/index/resetusercode?token=${token}`;
+   const username = user.username;
+   const email = user.email;
+   const mailtitle = 'usercode Reset';
+   
+   const viewData = { 
+     username, 
+     email, 
+     resetlink,
+     config: {
+       app: {
+         name: process.env.APP_NAME || 'Bits Tutor Connect'
+       }
+     }
+   };
+   const mailbody = await ejs.renderFile("views/pages/index/usercode_reset_email_template.ejs", viewData);
 
   const mailResult: any = await mailer.sendMail(email, mailtitle, mailbody);
 
@@ -342,18 +406,32 @@ async function sendusercodeResetLink(user: User): Promise<boolean> {
   }
 
   return true;
-}
+ }
 
-async function getUserLoginData(user: User, res: Response) {
-  const expiresIn = `${process.env.AUTH_JWT_DURATION || '30'}m`;
-  const userid = user.id;
-  const jti = crypto.randomUUID();
-  const token = jwt.sign(
-    { sub: userid, jti },
-    process.env.AUTH_API_TOKEN_SECRET || '',
-    { expiresIn, algorithm: 'HS256' }
-  );
-  return { token };
+async function sendUsercodeResetConfirmation(username: string, email: string, newusercode: string): Promise<boolean> {
+  // Only subscribers receive their new usercode via email for security
+  // Non-subscribers (admin, teacher, marketer) reset via token but don't get code emailed
+  const mailtitle = 'Usercode Reset Confirmation';
+
+  const viewData = {
+    username,
+    email,
+    newusercode,
+    config: {
+      app: {
+        name: process.env.APP_NAME || 'Bits Tutor Connect'
+      }
+    }
+  };
+
+  const mailbody = await ejs.renderFile("views/pages/index/usercode_reset_confirmation_template.ejs", viewData);
+  const mailResult: any = await mailer.sendMail(email, mailtitle, mailbody);
+
+  if (!mailResult.messageId) {
+    throw new Error(mailResult.error);
+  }
+
+  return true;
 }
 
 function generateUserToken(user: User): string {

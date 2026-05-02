@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -6,20 +5,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import Layout from "@/components/Layout";
 import { useGuestStore } from "@/stores/useGuestStore";
 import { useLessonSettingsStore } from "@/stores/useLessonSettingsStore";
-import { type Lesson, guestService } from "@/services/guest";
+import { type Lesson } from "@/services/guest";
 import {
   BookOpen,
   CheckCircle,
   Loader2,
   ArrowLeft,
-  UserPlus,
 } from "lucide-react";
 
 import useSelectionFlow from "@/hooks/useSelectionFlow";
 import VideoPlayer from "@/components/VideoPlayer";
 import LessonCard from "@/components/LessonCard";
 import LessonPurchaseModal from "@/components/LessonPurchaseModal";
-import PhoneVerificationCard from "@/components/PhoneVerificationCard";
+import PhoneVerificationModal from "@/components/PhoneVerificationModal";
 
 export default function GuestClassPage() {
   const {
@@ -36,11 +34,11 @@ export default function GuestClassPage() {
     return saved && saved.length >= 12 ? saved : "";
   });
   const [isVerifying, setIsVerifying] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [purchaseLesson, setPurchaseLesson] = useState<Lesson | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -56,41 +54,20 @@ export default function GuestClassPage() {
         localStorage.setItem("guest_phone", phoneInput);
         useGuestStore.getState().setPhone(phoneInput);
         useGuestStore.getState().setVerified(true);
+        setShowPhoneModal(false);
+        toast.success("Phone verified! You can now purchase lessons.");
         const lessonIds = selectionHandlers.lessons.map((l) => l.id);
         if (lessonIds.length > 0) {
           await useGuestStore.getState().checkAllPurchaseStatuses(phoneInput, lessonIds);
         }
       } else {
-        toast.error("Phone number not found. Please register first.");
+        setRegisterError("This phone is already registered. Please log in instead.");
       }
     } catch (error) {
       console.error("Verification error:", error);
+      setRegisterError("Failed to verify phone");
     } finally {
       setIsVerifying(false);
-    }
-  };
-
-  const handleRegisterGuest = async () => {
-    if (!phoneInput || phoneInput.length < 12) return;
-    setIsRegistering(true);
-    setRegisterError(null);
-    try {
-      const result = await guestService.registerGuest(phoneInput);
-      if (result.success) {
-        localStorage.setItem("guest_phone", phoneInput);
-        useGuestStore.getState().setPhone(phoneInput);
-        useGuestStore.getState().setVerified(true);
-        toast.success("Account created! You can now purchase lessons.");
-        const lessonIds = selectionHandlers.lessons.map((l) => l.id);
-        if (lessonIds.length > 0) {
-          await useGuestStore.getState().checkAllPurchaseStatuses(phoneInput, lessonIds);
-        }
-      }
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      setRegisterError(error.message || "Registration failed");
-    } finally {
-      setIsRegistering(false);
     }
   };
 
@@ -102,7 +79,7 @@ export default function GuestClassPage() {
 
   const handleWatchLesson = (lesson: Lesson) => {
     if (!phone || !isVerified) {
-      toast.error("Please verify your phone number first.");
+      setShowPhoneModal(true);
       return;
     }
     const status = purchaseStatuses.get(lesson.id);
@@ -312,30 +289,12 @@ export default function GuestClassPage() {
           {!isVerified && (
             <section className="py-8 bg-muted/30">
               <div className="container mx-auto px-4">
-                <PhoneVerificationCard
-                  phoneInput={phoneInput}
-                  onPhoneChange={setPhoneInput}
-                  isVerifying={isVerifying}
-                  onVerify={handleVerifyPhone}
-                />
-                <div className="mt-4">
-                  {registerError && (
-                    <p className="text-red-500 text-sm mb-2">{registerError}</p>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={handleRegisterGuest}
-                    disabled={isRegistering || !phoneInput || phoneInput.length < 12}
-                    className="w-full"
-                  >
-                    {isRegistering ? (
-                      <Loader2 className="h-4 w-4 animate-spin mx-auto" />
-                    ) : (
-                      <>
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Register New Account
-                      </>
-                    )}
+                <div className="text-center">
+                  <p className="text-muted-foreground mb-4">
+                    Verify your phone to purchase and access lessons
+                  </p>
+                  <Button onClick={() => setShowPhoneModal(true)}>
+                    Verify Phone Number
                   </Button>
                 </div>
               </div>
@@ -343,6 +302,16 @@ export default function GuestClassPage() {
           )}
         </>
       )}
+
+      <PhoneVerificationModal
+        open={showPhoneModal}
+        onOpenChange={setShowPhoneModal}
+        phoneInput={phoneInput}
+        onPhoneChange={setPhoneInput}
+        isVerifying={isVerifying}
+        onVerify={handleVerifyPhone}
+        registerError={registerError}
+      />
     </Layout>
   );
 }

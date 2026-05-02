@@ -1,13 +1,18 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { api } from "./services/api"
 
 // Lazy-loaded pages
 const HomePage = lazy(() => import('./pages/HomePage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
+const ForgotUsercodePage = lazy(() => import('./pages/ForgotUsercodePage'))
+const UserGuidePage = lazy(() => import('./pages/UserGuidePage'))
+const ContactUsPage = lazy(() => import('./pages/ContactUsPage'))
+const AboutUsPage = lazy(() => import('./pages/AboutUsPage'))
+const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'))
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
 const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
-const SubscriptionCheckoutPage = lazy(() => import('./pages/SubscriptionCheckoutPage'))
 const PackagesPage = lazy(() => import('./pages/PackagesPage'))
-const PackageCheckoutPage = lazy(() => import('./pages/PackageCheckoutPage'))
 const SubscriberDashboardPage = lazy(() => import('./pages/SubscriberDashboardPage'))
 const MarketerDashboardPage = lazy(() => import('./pages/MarketerDashboardPage'))
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
@@ -21,18 +26,8 @@ const ReferralsPage = lazy(() => import('./pages/ReferralsPage'))
 const LessonManagementPage = lazy(() => import('./pages/LessonManagementPage'))
 const LearningHierarchyPage = lazy(() => import('./pages/LearningHierarchyPage'))
 const InvitesPage = lazy(() => import('./pages/InvitesPage'))
-const WeekendTutorialsPage = lazy(() => import('./pages/WeekendTutorialsPage'))
-const GoToClassPage = lazy(() => import('./pages/GoToClassPage'))
-const AboutUsPage = lazy(() => import('./pages/AboutUsPage'))
-const ContactUsPage = lazy(() => import('./pages/ContactUsPage'))
-const UserGuidePage = lazy(() => import('./pages/UserGuidePage'))
-const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
-const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'))
-const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'))
 const ChangeUsercodePage = lazy(() => import('./pages/ChangeUsercodePage'))
-const ForgotUsercodePage = lazy(() => import('./pages/ForgotUsercodePage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
-const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'))
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
 const AdminWithdrawalsPage = lazy(() => import('./pages/AdminWithdrawalsPage'))
 const AdminRolesPage = lazy(() => import('./pages/AdminRolesPage'))
@@ -40,6 +35,13 @@ const AdminTransactionsPage = lazy(() => import('./pages/AdminTransactionsPage')
 const AdminSubscriptionsPage = lazy(() => import('./pages/AdminSubscriptionsPage'))
 const BunnySyncAdminPage = lazy(() => import('./pages/BunnySyncAdminPage'))
 const BunnyUploadAdminPage = lazy(() => import('./pages/BunnyUploadAdminPage'))
+const GoToClassPage = lazy(() => import('./pages/GoToClassPage'))
+const GuestClassPage = lazy(() => import('./pages/GuestClassPage'))
+const WeekendTutorialsPage = lazy(() => import('./pages/WeekendTutorialsPage'))
+const SubscriberClassPage = lazy(() => import('./pages/SubscriberClassPage'))
+const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'))
+const PackageCheckoutPage = lazy(() => import('./pages/PackageCheckoutPage'))
+const SubscriptionCheckoutPage = lazy(() => import('./pages/SubscriptionCheckoutPage'))
 
 // Page loading fallback
 const PageLoader = () => (
@@ -59,51 +61,41 @@ const withSuspense = (Component: React.ComponentType) => (
 import { ProtectedRoute } from "./components/ProtectedRoute"
 
 function App() {
+  // Initialize CSRF token on app load
+  useEffect(() => {
+    // Fetch CSRF token to set cookie for subsequent state-changing requests
+    api.get('/auth/csrf-token').catch((err) => {
+      console.error('Failed to fetch CSRF token:', err);
+    });
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={withSuspense(HomePage)} />
         <Route path="/login" element={withSuspense(LoginPage)} />
-        <Route path="/customlogin" element={withSuspense(LoginPage)} />
         <Route path="/forgot-usercode" element={withSuspense(ForgotUsercodePage)} />
-        <Route path="/subscriptions" element={withSuspense(SubscriptionsPage)} />
-        <Route path="/subscribe/:packageId/checkout" element={withSuspense(SubscriptionCheckoutPage)} />
-        <Route path="/packages" element={withSuspense(PackagesPage)} />
-        <Route path="/packages/buy/:id" element={withSuspense(PackageCheckoutPage)} />
-          <Route path="/weekend-tutorials" element={withSuspense(WeekendTutorialsPage)} />
-          <Route path="/gotoclass" element={withSuspense(GoToClassPage)} />
-          <Route path="/class" element={withSuspense(GoToClassPage)} />
-         <Route
-            path="/class/subscriber"
-            element={
-              <ProtectedRoute requireAuth requireRole="subscriber">
-                {withSuspense(GoToClassPage)}
-              </ProtectedRoute>
-            }
-         />
-         <Route path="/subscribe/:id" element={withSuspense(SubscriptionsPage)} />
-        <Route path="/aboutus" element={withSuspense(AboutUsPage)} />
-        <Route path="/contactus" element={withSuspense(ContactUsPage)} />
         <Route path="/guide" element={withSuspense(UserGuidePage)} />
-        <Route path="/privacy" element={withSuspense(PrivacyPolicyPage)} />
+        <Route path="/contactus" element={withSuspense(ContactUsPage)} />
+        <Route path="/aboutus" element={withSuspense(AboutUsPage)} />
         <Route path="/terms" element={withSuspense(TermsOfServicePage)} />
-        <Route path="/unauthorized" element={withSuspense(UnauthorizedPage)} />
-
-        {/* Protected routes */}
-        <Route
-          path="/account"
-          element={
-            <ProtectedRoute requireAuth>
-              {withSuspense(AccountSettingsPage)}
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/privacy" element={withSuspense(PrivacyPolicyPage)} />
+        <Route path="/subscriptions" element={withSuspense(SubscriptionsPage)} />
+        <Route path="/packages" element={withSuspense(PackagesPage)} />
         <Route
           path="/settings"
           element={
             <ProtectedRoute requireAuth>
               {withSuspense(ChangeUsercodePage)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/account"
+          element={
+            <ProtectedRoute requireAuth>
+              {withSuspense(AccountSettingsPage)}
             </ProtectedRoute>
           }
         />
@@ -279,6 +271,50 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Go To Class - Subscriber or guest access */}
+        <Route
+          path="/gotoclass"
+          element={
+            <ProtectedRoute requireAuth={false}>
+              {withSuspense(GoToClassPage)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/class"
+          element={
+            <ProtectedRoute requireAuth={false}>
+              {withSuspense(GoToClassPage)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/subscriber-class"
+          element={
+            <ProtectedRoute requireAuth={false}>
+              {withSuspense(SubscriberClassPage)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/guest-class"
+          element={
+            <ProtectedRoute requireAuth={false}>
+              {withSuspense(GuestClassPage)}
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Weekend Tutorials - Public access */}
+        <Route
+          path="/weekend-tutorials"
+          element={withSuspense(WeekendTutorialsPage)}
+        />
+
+        {/* Checkout pages - Public access (payment can be made by guests) */}
+        <Route path="/checkout/package" element={withSuspense(PackageCheckoutPage)} />
+        <Route path="/checkout/subscription" element={withSuspense(SubscriptionCheckoutPage)} />
 
         {/* Catch-all 404 */}
         <Route path="*" element={<NotFoundPage />} />

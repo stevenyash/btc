@@ -386,26 +386,19 @@ export const MpesaPaymentModule: React.FC<MpesaPaymentModuleProps> = ({
   const { user } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
 
-  const paymentMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/mpesa/stkpush`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          amount,
-          accountReference,
-          customerPhone: user?.phone,
-          description: `${activationType} payment`,
-          metadata: {
-            activationType,
-            userId: user?.id,
-            ...businessMetadata,
-          },
-        }),
-      });
+   const paymentMutation = useMutation({
+     mutationFn: async () => {
+       const response = await apiService.post('/api/payments/mpesa/stkpush', {
+         amount,
+         accountReference,
+         customerPhone: user?.phone,
+         description: `${activationType} payment`,
+         metadata: {
+           activationType,
+           userId: user?.id,
+           ...businessMetadata,
+         },
+       });
 
       if (!response.ok) {
         throw new Error('Payment request failed');

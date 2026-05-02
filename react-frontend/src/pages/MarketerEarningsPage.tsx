@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   DollarSign,
   ArrowLeft,
@@ -24,12 +24,7 @@ export default function MarketerEarningsPage() {
   const [withdrawalHistory, setWithdrawalHistory] = useState<MarketerWithdrawal[]>([])
   const [redemptionHistory, setRedemptionHistory] = useState<MarketerPointRedemption[]>([])
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    setIsLoading(true)
+  const loadData = useCallback(async () => {
     try {
       await fetchEarningsSummary()
       const [withdrawals, redemptions] = await Promise.all([
@@ -40,10 +35,13 @@ export default function MarketerEarningsPage() {
       setRedemptionHistory(redemptions)
     } catch (error) {
       console.error("Failed to load earnings data:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [fetchEarningsSummary])
+
+  useEffect(() => {
+    setIsLoading(true)
+    loadData().finally(() => setIsLoading(false))
+  }, [loadData])
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-KE", {
@@ -94,7 +92,14 @@ export default function MarketerEarningsPage() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Dashboard
             </Button>
-            <Button onClick={loadData} disabled={isLoading}>
+            <Button onClick={async () => {
+              setIsLoading(true)
+              try {
+                await loadData()
+              } finally {
+                setIsLoading(false)
+              }
+            }} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>

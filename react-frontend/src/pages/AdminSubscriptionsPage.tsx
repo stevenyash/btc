@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { CreditCard, RefreshCw, Search, Trash2, X, Plus, Pencil, Save } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -14,11 +14,11 @@ import { CanI } from "@/components/CanI"
 export default function AdminSubscriptionsPage() {
   const navigate = useNavigate()
   const [subscriptions, setSubscriptions] = useState<SubscriptionType[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
 
   const [showModal, setShowModal] = useState(false)
   const [editingSubscription, setEditingSubscription] = useState<SubscriptionType | null>(null)
@@ -29,34 +29,34 @@ export default function AdminSubscriptionsPage() {
     months: 1
   })
 
+  const fetchSubscriptions = useCallback(async (page: number) => {
+    setIsLoading(true)
+    try {
+      const response = await adminService.getSubscriptionTypes(page, 20)
+      const data = response.data
+      setSubscriptions(Array.isArray(data) ? data : [])
+      setTotal(response.total)
+      setTotalPages(Math.ceil(response.total / 20))
+    } catch (error) {
+      console.error("Failed to fetch subscriptions:", error)
+      toast.error("Failed to fetch subscription types")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    fetchSubscriptions()
-  }, [currentPage])
+    fetchSubscriptions(currentPage)
+  }, [currentPage, fetchSubscriptions])
 
-   const fetchSubscriptions = async () => {
-     setIsLoading(true)
-     try {
-       const response = await adminService.getSubscriptionTypes(currentPage, 20)
-       const data = response.data
-       setSubscriptions(Array.isArray(data) ? data : [])
-       setTotal(response.total)
-       setTotalPages(Math.ceil(response.total / 20))
-     } catch (error) {
-       console.error("Failed to fetch subscriptions:", error)
-       toast.error("Failed to fetch subscription types")
-     } finally {
-       setIsLoading(false)
-     }
-   }
-
-   const handleOpenModal = (sub?: SubscriptionType) => {
-    if (sub) {
-      setEditingSubscription(sub)
+  const handleOpenModal = (subscription?: SubscriptionType) => {
+    if (subscription) {
+      setEditingSubscription(subscription)
       setFormData({
-        name: sub.name,
-        description: sub.description || "",
-        membership_fee: sub.membership_fee,
-        months: sub.months
+        name: subscription.name,
+        description: subscription.description || "",
+        membership_fee: subscription.membership_fee,
+        months: subscription.months
       })
     } else {
       setEditingSubscription(null)
@@ -92,8 +92,8 @@ export default function AdminSubscriptionsPage() {
         await adminService.createSubscriptionType(formData)
         toast.success("Subscription type created successfully")
       }
-      fetchSubscriptions()
       handleCloseModal()
+      await fetchSubscriptions(currentPage)
     } catch (error) {
       console.error("Failed to save subscription type:", error)
       toast.error("Failed to save subscription type")
@@ -109,10 +109,19 @@ export default function AdminSubscriptionsPage() {
     try {
       await adminService.deleteSubscriptionType(id)
       toast.success("Subscription type deleted successfully")
-      fetchSubscriptions()
+      await fetchSubscriptions(currentPage)
     } catch (error) {
       console.error("Failed to delete subscription type:", error)
       toast.error("Failed to delete subscription type")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setIsLoading(true)
+    try {
+      await fetchSubscriptions(currentPage)
     } finally {
       setIsLoading(false)
     }
@@ -168,7 +177,7 @@ export default function AdminSubscriptionsPage() {
               <Button 
                 variant="outline" 
                 className="bg-white text-slate-800 hover:bg-slate-100"
-                onClick={fetchSubscriptions}
+                onClick={handleRefresh}
                 disabled={isLoading}
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />

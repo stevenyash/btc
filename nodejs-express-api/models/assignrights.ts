@@ -17,7 +17,7 @@ class AssignRights extends BaseModel<AssignRightsAttributes, AssignRightsCreatio
 			{
 				id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
 				description: { type: DataTypes.STRING },
-				permission: { type: DataTypes.STRING, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any }
+				permission: { type: DataTypes.STRING, allowNull: false }
 			},
 			{
 				sequelize,

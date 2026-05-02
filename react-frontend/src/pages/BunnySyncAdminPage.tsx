@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { useRole } from '@/hooks/useRole';
+import { bunnyUploadService } from '@/services/bunny-upload';
 import {
   Loader2,
   HardDrive,
@@ -272,7 +273,6 @@ const BunnySyncAdminPage = () => {
   const processMultiUpload = async () => {
     if (multiUploadFiles.length === 0) return;
 
-    const token = localStorage.getItem('token');
     const results: any[] = [];
     const progress = new Map(multiUploadProgress);
 
@@ -308,13 +308,9 @@ const BunnySyncAdminPage = () => {
         progress.set(file.name, 10);
         setMultiUploadProgress(new Map(progress));
 
-        const uploadRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/bunny-upload/upload`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
+        // Use centralized service with CSRF token and error handling
+        const uploadData = await bunnyUploadService.uploadVideo(file);
 
-        const uploadData = await uploadRes.json();
         if (!uploadData.success || !uploadData.uploads || uploadData.uploads.length === 0) {
           throw new Error('Upload failed');
         }
@@ -323,18 +319,8 @@ const BunnySyncAdminPage = () => {
         progress.set(file.name, 30);
         setMultiUploadProgress(new Map(progress));
 
-        const processRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || ''}/api/bunny-upload/process/${jobId}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const processData = await bunnyUploadService.processSingleUpload(jobId);
 
-        const processData = await processRes.json();
         if (!processData.success) {
           throw new Error(processData.error || 'Processing failed');
         }
@@ -342,7 +328,7 @@ const BunnySyncAdminPage = () => {
         progress.set(file.name, 80);
         setMultiUploadProgress(new Map(progress));
 
-        const bunnyVideoId = processData.videoId;
+        const bunnyVideoId = processData.videoId!;
 
         if (collectionGuid) {
           try {

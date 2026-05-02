@@ -19,15 +19,20 @@ interface Mailer {
 
 const mailer: Mailer = {
   sendMail: async function (recEmail: string, subject: string, msg: string): Promise<SendMailResult> {
-    const transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST || '',
-      port: parseInt(process.env.MAIL_PORT || '587'),
-      secure: process.env.MAIL_SECURE === 'true',
-      auth: {
-        user: process.env.MAIL_USERNAME || '',
-        pass: process.env.MAIL_PASSWORD || ''
-      }
-    });
+     const transporter = nodemailer.createTransport({
+       host: process.env.MAIL_HOST || '',
+       port: parseInt(process.env.MAIL_PORT || '587'),
+       secure: process.env.MAIL_SECURE === 'true',
+       tls: {
+         // Default: reject unauthorized in production, allow in development
+         // Override with MAIL_TLS_REJECT_UNAUTHORIZED=true|false
+         rejectUnauthorized: process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== 'false'
+       },
+       auth: {
+         user: process.env.MAIL_USERNAME || '',
+         pass: process.env.MAIL_PASSWORD || ''
+       }
+     });
 
     const sender = `"${process.env.MAIL_SENDER_NAME || 'Sender'}" <${process.env.MAIL_SENDER_EMAIL || ''}>`;
 

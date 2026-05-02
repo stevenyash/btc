@@ -611,8 +611,6 @@ router.post('/video-to-collection', async (req: Request, res: Response) => {
   }
 });
 
-export default router;
-
 // GET collections (legacy endpoint for frontend compatibility)
 router.get('/collections', async (req: Request, res: Response) => {
   try {
@@ -665,40 +663,4 @@ router.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
-// GET sync statistics
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
-    const totalLessons = await DB.Lessons.count();
-    const inSync = await DB.Lessons.count({
-      where: {
-        bunny_video_id: { [DB.op.not]: null },
-        transcoding_status: 'completed'
-      }
-    });
-    const pending = await DB.Lessons.count({
-      where: {
-        bunny_video_id: { [DB.op.not]: null },
-        transcoding_status: { [DB.op.not]: 'completed' }
-      }
-    });
-    const noBunnyVideo = await DB.Lessons.count({
-      where: {
-        [DB.op.or]: [
-          { bunny_video_id: null },
-          { bunny_video_id: '' }
-        ]
-      }
-    });
-
-    return res.json({
-      success: true,
-      totalLessons,
-      inSync,
-      pending,
-      noBunnyVideo
-    });
-  } catch (error: any) {
-    console.error('Error fetching stats:', error);
-    return res.status(500).json({ error: error.message });
-  }
-});
+export default router;

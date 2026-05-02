@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import type {
   BunnyVideo,
   MappingItem,
-  MappingStatusResponse,
   BunnySyncStats,
   SyncedLesson,
   Collection,
@@ -13,12 +12,7 @@ import type {
   Subtopic,
   LessonDetail,
 } from '@/types/bunny-sync';
-
-const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || '';
-
-const getAuthHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem('token')}`,
-});
+import { bunnySyncService } from '@/services/bunny-sync';
 
 export interface BunnySyncState {
   // Stats
@@ -135,251 +129,145 @@ export const useBunnySyncStore = create<BunnySyncState>()((set, get) => ({
   selectedLessonId: '',
   selectedUnmappedVideo: null,
 
-  // Fetch stats
-  fetchStats: async () => {
-    set({ statsLoading: true });
-    try {
-      const response = await fetch(`${getApiBase()}/api/bunny-sync/stats`, {
-        headers: getAuthHeaders(),
-      });
-      const data = await response.json();
-      if (data.success) {
-        set({
-          stats: {
-            totalLessons: data.totalLessons || 0,
-            inSync: data.inSync || 0,
-            pending: data.pending || 0,
-            noBunnyVideo: data.noBunnyVideo || 0,
-          },
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      set({ statsLoading: false });
-    }
-  },
+   // Fetch stats
+   fetchStats: async () => {
+     set({ statsLoading: true });
+     try {
+       const stats = await bunnySyncService.fetchStats();
+       set({ stats });
+     } catch (error) {
+       console.error('Error fetching stats:', error);
+     } finally {
+       set({ statsLoading: false });
+     }
+   },
 
-  // Fetch bunny videos
-  fetchBunnyVideos: async () => {
-    set({ bunnyVideosLoading: true });
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/bunny-sync/bunny-videos?page=1&limit=100`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        const normalized = (data.data || []).map((v: any) => ({
-          guid: v.guid || v.bunnyVideoId,
-          title: v.title || '',
-          transcodingStatus: v.status || v.transcodingStatus || 'pending',
-          mappedLesson: v.mappedLesson || null,
-        }));
-        set({ bunnyVideos: normalized });
-      }
-    } catch (error) {
-      console.error('Error fetching Bunny videos:', error);
-    } finally {
-      set({ bunnyVideosLoading: false });
-    }
-  },
+   // Fetch bunny videos
+   fetchBunnyVideos: async () => {
+     set({ bunnyVideosLoading: true });
+     try {
+       const bunnyVideos = await bunnySyncService.fetchBunnyVideos();
+       set({ bunnyVideos });
+     } catch (error) {
+       console.error('Error fetching Bunny videos:', error);
+     } finally {
+       set({ bunnyVideosLoading: false });
+     }
+   },
 
-  // Fetch mapping data
-  fetchMappingData: async () => {
-    set({ mappingLoading: true });
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/bunny-sync/mapping-status?page=1&limit=100`,
-        { headers: getAuthHeaders() }
-      );
-      const data: MappingStatusResponse = await response.json();
-      if (data.success) {
-        const normalized: MappingItem[] = (data.data || []).map((item: any) => ({
-          bunnyVideoId: item.guid || item.bunnyVideoId,
-          title: item.title || '',
-          transcodingStatus: item.status || item.transcodingStatus || 'pending',
-          isMapped: item.isMapped || false,
-          mappedLesson: item.mappedLesson || undefined,
-        }));
-        set({ 
-          mappingData: normalized,
-          mappingSummary: data.summary ? {
-            total: data.summary.totalBunnyVideos || data.summary.total || 0,
-            mapped: data.summary.mappedVideos || data.summary.mapped || 0,
-            unmapped: data.summary.unmappedVideos || data.summary.unmapped || 0,
-          } : { total: 0, mapped: 0, unmapped: 0 },
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching mapping status:', error);
-    } finally {
-      set({ mappingLoading: false });
-    }
-  },
+   // Fetch mapping data
+   fetchMappingData: async () => {
+     set({ mappingLoading: true });
+     try {
+       const { mappingData, summary } = await bunnySyncService.fetchMappingData();
+       set({ 
+         mappingData,
+         mappingSummary: summary
+       });
+     } catch (error) {
+       console.error('Error fetching mapping status:', error);
+     } finally {
+       set({ mappingLoading: false });
+     }
+   },
 
-  // Fetch synced lessons
-  fetchSyncedLessons: async () => {
-    set({ syncedLessonsLoading: true });
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/bunny-sync/pending?limit=1000`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        const normalized: SyncedLesson[] = (data.data || []).map((l: any) => ({
-          id: l.id,
-          title: l.title || `Lesson #${l.id}`,
-          bunny_video_id: l.bunny_video_id,
-          storage_path: l.storage_path,
-          transcoding_status: l.transcoding_status,
-          sync_status: l.sync_status,
-          sync_progress: l.sync_progress,
-          thumbnail_url: undefined,
-        }));
-        set({ syncedLessons: normalized });
-      }
-    } catch (error) {
-      console.error('Error fetching synced lessons:', error);
-    } finally {
-      set({ syncedLessonsLoading: false });
-    }
-  },
+   // Fetch synced lessons
+   fetchSyncedLessons: async () => {
+     set({ syncedLessonsLoading: true });
+     try {
+       const syncedLessons = await bunnySyncService.fetchSyncedLessons();
+       set({ syncedLessons });
+     } catch (error) {
+       console.error('Error fetching synced lessons:', error);
+     } finally {
+       set({ syncedLessonsLoading: false });
+     }
+   },
 
-  // Fetch collections
-  fetchCollections: async () => {
-    set({ collectionsLoading: true });
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/bunny-sync/collections`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ collections: data.data || [] });
-      }
-    } catch (error) {
-      console.error('Error fetching collections:', error);
-    } finally {
-      set({ collectionsLoading: false });
-    }
-  },
+   // Fetch collections
+   fetchCollections: async () => {
+     set({ collectionsLoading: true });
+     try {
+       const collections = await bunnySyncService.fetchCollections();
+       set({ collections });
+     } catch (error) {
+       console.error('Error fetching collections:', error);
+     } finally {
+       set({ collectionsLoading: false });
+     }
+   },
 
-  // Fetch levels
-  fetchLevels: async () => {
-    set({ hierarchyLoading: true });
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/learning-hierarchy/levels`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ levels: data.data || [] });
-      }
-    } catch (error) {
-      console.error('Error fetching levels:', error);
-    } finally {
-      set({ hierarchyLoading: false });
-    }
-  },
+   // Fetch levels
+   fetchLevels: async () => {
+     set({ hierarchyLoading: true });
+     try {
+       const levels = await bunnySyncService.fetchLevels();
+       set({ levels });
+     } catch (error) {
+       console.error('Error fetching levels:', error);
+     } finally {
+       set({ hierarchyLoading: false });
+     }
+   },
 
-  // Fetch grades by level
-  fetchGradesByLevel: async (levelId: number) => {
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/learning-hierarchy/levels/${levelId}/grades`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ grades: data.data || [] });
-      }
-    } catch (error) {
-      console.error('Error fetching grades:', error);
-    }
-  },
+   // Fetch grades by level
+   fetchGradesByLevel: async (levelId: number) => {
+     try {
+       const grades = await bunnySyncService.fetchGradesByLevel(levelId);
+       set({ grades });
+     } catch (error) {
+       console.error('Error fetching grades:', error);
+     }
+   },
 
-  // Fetch areas by grade
-  fetchAreasByGrade: async (gradeId: number) => {
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/learning-hierarchy/grades/${gradeId}/areas`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ areas: data.data || [] });
-      }
-    } catch (error) {
-      console.error('Error fetching areas:', error);
-    }
-  },
+   // Fetch areas by grade
+   fetchAreasByGrade: async (gradeId: number) => {
+     try {
+       const areas = await bunnySyncService.fetchAreasByGrade(gradeId);
+       set({ areas });
+     } catch (error) {
+       console.error('Error fetching areas:', error);
+     }
+   },
 
-  // Fetch topics by area
-  fetchTopicsByArea: async (areaId: number) => {
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/learning-hierarchy/areas/${areaId}/topics`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ topics: data.data || [] });
-      }
-    } catch (error) {
-      console.error('Error fetching topics:', error);
-    }
-  },
+   // Fetch topics by area
+   fetchTopicsByArea: async (areaId: number) => {
+     try {
+       const topics = await bunnySyncService.fetchTopicsByArea(areaId);
+       set({ topics });
+     } catch (error) {
+       console.error('Error fetching topics:', error);
+     }
+   },
 
-  // Fetch subtopics by topic
-  fetchSubtopicsByTopic: async (topicId: number) => {
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/learning-hierarchy/topics/${topicId}/subtopics`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ subtopics: data.data || [] });
-      }
-    } catch (error) {
-      console.error('Error fetching subtopics:', error);
-    }
-  },
+   // Fetch subtopics by topic
+   fetchSubtopicsByTopic: async (topicId: number) => {
+     try {
+       const subtopics = await bunnySyncService.fetchSubtopicsByTopic(topicId);
+       set({ subtopics });
+     } catch (error) {
+       console.error('Error fetching subtopics:', error);
+     }
+   },
 
-  // Fetch filtered lessons
-  fetchFilteredLessons: async (areaId: number | string, topicId?: number | string, subtopicId?: number | string) => {
-    if (!areaId) {
-      set({ filteredLessons: [] });
-      return;
-    }
+   // Fetch filtered lessons
+   fetchFilteredLessons: async (areaId: number | string, topicId?: number | string, subtopicId?: number | string) => {
+     if (!areaId) {
+       set({ filteredLessons: [] });
+       return;
+     }
 
-    set({ filteredLessonsLoading: true });
-    try {
-      const params = new URLSearchParams();
-      params.append('area_id', areaId.toString());
-      if (topicId) params.append('topic_id', topicId.toString());
-      if (subtopicId) params.append('subtopic_id', subtopicId.toString());
-
-      const response = await fetch(
-        `${getApiBase()}/api/learning-hierarchy/filtered-lessons?${params}`,
-        { headers: getAuthHeaders() }
-      );
-      const data = await response.json();
-      if (data.success) {
-        set({ filteredLessons: data.data || [] });
-      } else {
-        set({ filteredLessons: [] });
-      }
-    } catch (error) {
-      console.error('Error fetching filtered lessons:', error);
-      set({ filteredLessons: [] });
-    } finally {
-      set({ filteredLessonsLoading: false });
-    }
-  },
+     set({ filteredLessonsLoading: true });
+     try {
+       const filteredLessons = await bunnySyncService.fetchFilteredLessons(areaId, topicId, subtopicId);
+       set({ filteredLessons });
+     } catch (error) {
+       console.error('Error fetching filtered lessons:', error);
+       set({ filteredLessons: [] });
+     } finally {
+       set({ filteredLessonsLoading: false });
+     }
+   },
 
   // Selection setters
   setSelectedLevelId: (id) => {
@@ -430,77 +318,35 @@ export const useBunnySyncStore = create<BunnySyncState>()((set, get) => ({
 
   setSelectedUnmappedVideo: (video) => set({ selectedUnmappedVideo: video }),
 
-  // Link video to lesson
-  linkVideoToLesson: async (bunnyVideoId: string, lessonId: number) => {
-    try {
-      const response = await fetch(
-        `${getApiBase()}/api/bunny-sync/link-bunny-video`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({ bunnyVideoId, lessonId }),
-        }
-      );
+   // Link video to lesson
+   linkVideoToLesson: async (bunnyVideoId: string, lessonId: number) => {
+     try {
+       await bunnySyncService.linkVideoToLesson(bunnyVideoId, lessonId);
+     } catch (error) {
+       console.error('Error linking video:', error);
+       throw error;
+     }
+   },
 
-      if (!response.ok) {
-        if (response.status === 400) {
-          const data = await response.json();
-          throw new Error(data.error || 'This video is already linked to a lesson');
-        }
-        throw new Error(`Request failed with status ${response.status}`);
-      }
+   // Create collection
+   createCollection: async (name: string) => {
+     try {
+       return await bunnySyncService.createCollection(name);
+     } catch (error) {
+       console.error('Error creating collection:', error);
+       throw error;
+     }
+   },
 
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to link video');
-      }
-    } catch (error) {
-      console.error('Error linking video:', error);
-      throw error;
-    }
-  },
-
-  // Create collection
-  createCollection: async (name: string) => {
-    const response = await fetch(
-      `${getApiBase()}/api/bunny-sync/collection`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ name }),
-      }
-    );
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to create collection');
-    }
-    return data.data;
-  },
-
-  // Assign video to collection
-  assignVideoToCollection: async (videoId: string, collectionId: string | null) => {
-    const response = await fetch(
-      `${getApiBase()}/api/bunny-sync/video-to-collection`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ videoId, collectionId }),
-      }
-    );
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.error);
-    }
-  },
+   // Assign video to collection
+   assignVideoToCollection: async (videoId: string, collectionId: string | null) => {
+     try {
+       await bunnySyncService.assignVideoToCollection(videoId, collectionId);
+     } catch (error) {
+       console.error('Error assigning video to collection:', error);
+       throw error;
+     }
+   },
 
   // Reset hierarchy selections
   resetHierarchySelections: () => {

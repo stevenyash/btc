@@ -2,21 +2,18 @@ import { sequelize } from '../../models/basemodel.js';
 import logger from '../../helpers/logger.js';
 
 export const initializeDatabase = async (): Promise<void> => {
-  try {
-    console.log("in database init")
-    await sequelize.authenticate();
-    logger.info('Database connection established successfully');
+   	try {
+   	  console.log("in database init")
+   	  await sequelize.authenticate();
+   	  logger.info('Database connection established successfully');
 
-    // In development, you might want to sync models (be careful in production)
-    if (process.env.NODE_ENV === 'development') {
-      // Consider using migrations instead
-      await sequelize.sync({ force: false, alter: false });
-      logger.info('Database synchronized (use migrations for schema changes)');
-    }
-  } catch (error) {
-    logger.error('Unable to connect to the database:', error);
-    process.exit(1);
-  }
+   	  // Database sync is completely disabled.
+   	  // Use explicit migrations (see /migrations folder) for schema changes.
+   	  logger.info('Database sync disabled (use migrations for schema changes)');
+   	} catch (error) {
+   	  logger.error('Unable to connect to the database:', error);
+   	  process.exit(1);
+   	}
 };
 
 export const closeDatabase = async (): Promise<void> => {

@@ -57,7 +57,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             isLoading: false,
           });
 
-          const { lessontrack, packages, subscriptions } = details;
+           const { lessontrack, subscriptions } = details;
 
           if (lessontrack) {
             set({
@@ -68,10 +68,9 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             });
           }
 
-          // Store current package as array for compatibility
-          if (packages) {
-            set({ packages: [packages] });
-          }
+      // The packages array should only contain the list from fetchPackages().
+      // Don't overwrite it with the user's current package from subscriber details.
+
 
            if (!subscriptions || subscriptions.id === 0) {
              set({

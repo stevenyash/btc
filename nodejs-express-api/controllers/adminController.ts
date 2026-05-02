@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import DB from '../models/db.js';
 import bunnyService from '../services/bunnyService.js';
 import fs from 'fs';
+import mailer from '../helpers/mailer.js';
 
 const router = Router();
 
@@ -539,286 +540,43 @@ router.put('/marketer-redemptions/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Commission settings
-router.get('/commission-settings', async (req: Request, res: Response) => {
+// Resend marketer credentials
+router.post('/marketers/:id/resend-credentials', async (req: Request, res: Response) => {
   try {
-    const settings = await DB.rawQueryOne('SELECT * FROM system_settings WHERE setting_key LIKE "commission_%" OR setting_key LIKE "point_%" OR setting_key LIKE "min_%" LIMIT 1');
-    return res.json(settings || {});
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-router.put('/commission-settings', async (req: Request, res: Response) => {
-  try {
-    // Update system settings - this depends on your system_settings table structure
-    return res.json({ success: true });
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-// Grades option list (simple id + name)
-router.get('/grades_option_list', async (req: Request, res: Response) => {
-  try {
-    const grades = await DB.Grades.findAll({
-      where: { is_active: true },
-      attributes: ['id', 'name'],
-      order: [['name', 'ASC']],
-      raw: true
-    });
-    return res.json(grades);
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-// Subjects/Learning Areas option list (simple id + name)
-router.get('/subjects_option_list', async (req: Request, res: Response) => {
-  try {
-    const subjects = await DB.LearningAreas.findAll({
-      where: { is_active: true },
-      attributes: ['id', 'name'],
-      order: [['name', 'ASC']],
-      raw: true
-    });
-    return res.json(subjects);
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-// Strands/Topics option list (simple id + name)
-router.get('/strands_option_list', async (req: Request, res: Response) => {
-  try {
-    const strands = await DB.Topics.findAll({
-      attributes: ['topic_id', 'name'],
-      order: [['name', 'ASC']],
-      raw: true
-    });
-    // Map topic_id to id for frontend compatibility
-    const mapped = strands.map(s => ({
-      id: s.topic_id,
-      name: s.name
-    }));
-    return res.json(mapped);
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-// Admin Lessons CRUD
-router.get('/admin_lessons', async (req: Request, res: Response) => {
-  try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const offset = (page - 1) * limit;
-
-    const { count, rows } = await DB.Lessons.findAndCountAll({
-      limit,
-      offset,
-      order: [['created_at', 'DESC']],
+    const marketerId = req.params.id;
+    const marketer = await DB.Marketers.findByPk(marketerId, {
       include: [
-        { model: DB.LearningAreas, as: 'learning_area', attributes: ['id', 'name'] },
-        { model: DB.Topics, as: 'topic', attributes: ['topic_id', 'name'] },
-        { model: DB.Subtopics, as: 'subtopic', attributes: ['subtopic_id', 'name'] }
-      ],
-      raw: true,
-      nest: true
+        { model: DB.Users, as: 'user', attributes: ['username', 'email', 'phone'] }
+      ]
     });
 
-    const lessons = rows.map((l: any) => ({
-      id: l.id,
-      title: l.title,
-      description: l.description,
-      grade: l.learning_area?.name || '',
-      subject: l.learning_area?.name || '',
-      strand: l.topic?.name || '',
-      subtopic: l.subtopic?.name || '',
-      s3_url: l.s3_url,
-      s3_key: l.s3_key,
-      storage_path: l.storage_path,
-      bunny_url: l.bunny_url,
-      thumbnail_url: l.thumbnail_url,
-      duration_minutes: l.duration,
-      file_size_mb: l.file_size ? Math.round(l.file_size / 1048576 * 100) / 100 : undefined,
-      file_type: 'video/mp4',
-      is_active: l.is_active,
-      status: l.is_active ? 'active' : 'inactive',
-      created_at: l.created_at,
-      updated_at: l.updated_at
-    }));
-
-    return res.json({
-      data: lessons,
-      total: count
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-router.get('/admin_lessons/:id', async (req: Request, res: Response) => {
-  try {
-    const lesson = await DB.Lessons.findByPk(req.params.id, {
-      include: [
-        { model: DB.LearningAreas, as: 'learning_area' },
-        { model: DB.Topics, as: 'topic' },
-        { model: DB.Subtopics, as: 'subtopic' }
-      ],
-      raw: true,
-      nest: true
-    });
-    if (!lesson) {
-      return res.status(404).json({ error: 'Lesson not found' });
+    if (!marketer) {
+      return res.status(404).json({ error: 'Marketer not found' });
     }
-    return res.json({
-      ...lesson,
-      duration_minutes: lesson.duration,
-      file_size_mb: lesson.file_size ? Math.round(lesson.file_size / 1048576 * 100) / 100 : undefined
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
 
-router.post('/admin_lessons', async (req: Request, res: Response) => {
-  try {
-    const record = await DB.Lessons.create(req.body);
-    return res.json(record);
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-router.put('/admin_lessons/:id', async (req: Request, res: Response) => {
-  try {
-    const record = await DB.Lessons.findByPk(req.params.id);
-    if (!record) {
-      return res.status(404).json({ error: 'Lesson not found' });
+    if (!marketer.user) {
+      return res.status(400).json({ error: 'Marketer has no associated user' });
     }
-    await record.update(req.body);
-    return res.json(record);
+
+    const emailSubject = "Your BTC Marketer Account Credentials";
+    const emailBody = `
+      <h2>Welcome to BTC Marketer Program!</h2>
+      <p>Hello ${marketer.user.username},</p>
+      <p>Your marketer account has been activated. Here are your login details:</p>
+      <ul>
+        <li><strong>Email:</strong> ${marketer.user.email}</li>
+        <li><strong>Phone:</strong> ${marketer.user.phone || 'Not provided'}</li>
+        <li><strong>Referral Code:</strong> ${marketer.referral_code || 'Not generated yet'}</li>
+      </ul>
+      <p>You can use your email or phone to log in to the marketer portal.</p>
+      <p>Best regards,<br/>BTC Team</p>
+    `;
+
+    await mailer.sendMail(marketer.user.email, emailSubject, emailBody);
+
+    return res.json({ success: true, message: 'Credentials resent successfully' });
   } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-router.patch('/admin_lessons/:id/toggle', async (req: Request, res: Response) => {
-  try {
-    const record = await DB.Lessons.findByPk(req.params.id);
-    if (!record) {
-      return res.status(404).json({ error: 'Lesson not found' });
-    }
-    const newStatus = !record.is_active;
-    await record.update({ is_active: newStatus });
-    return res.json({
-      id: record.id,
-      is_active: newStatus,
-      status: newStatus ? 'active' : 'inactive'
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-router.delete('/admin_lessons/:id', async (req: Request, res: Response) => {
-  try {
-    const record = await DB.Lessons.findByPk(req.params.id);
-    if (!record) {
-      return res.status(404).json({ error: 'Lesson not found' });
-    }
-    await record.destroy();
-    return res.json({ success: true });
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-router.post('/admin_lessons/upload', async (req: Request, res: Response) => {
-   try {
-     // File upload endpoint - expects multipart/form-data
-     // Handle file upload to Bunny.net
-     if (!req.files || !(req.files as any).video) {
-       return res.status(400).json({ error: 'No video file provided' });
-     }
-
-     const videoFile = (req.files as any).video;
-     const { title, description, area_id, topic_id, subtopic_id, price, is_preview_available, preview_duration } = req.body;
-
-     // Validate required fields
-     if (!title) {
-       return res.status(400).json({ error: 'Title is required' });
-     }
-
-     // Save file temporarily
-     const tempPath = `/tmp/${Date.now()}_${videoFile.name}`;
-     await videoFile.mv(tempPath);
-
-      try {
-        // Upload to Bunny.net Stream
-        const streamVideo = await bunnyService.uploadToStream(tempPath, {
-          title: title,
-          description: description || '',
-        });
-
-        // Fetch video metadata to get accurate status and thumbnail info
-        const videoMetadata = await bunnyService.getStreamVideo(streamVideo.guid);
-
-        // Create lesson record
-        const lesson = await DB.Lessons.create({
-          title: title,
-          description: description || null,
-          area_id: area_id ? parseInt(area_id) : null,
-          topic_id: topic_id ? parseInt(topic_id) : null,
-          subtopic_id: subtopic_id ? parseInt(subtopic_id) : null,
-          bunny_url: videoMetadata.videoUrl || bunnyService.getStreamUrl(videoMetadata.guid),
-          bunny_video_id: videoMetadata.guid,
-          video_guid: videoMetadata.guid,
-          transcoding_status: videoMetadata.status,
-          thumbnail_url: videoMetadata.thumbnailUrl || bunnyService.getThumbnailUrl(videoMetadata.guid, 0),
-          primary_thumbnail: videoMetadata.thumbnailUrl || bunnyService.getThumbnailUrl(videoMetadata.guid, 0),
-          price: price ? parseFloat(price) : 0,
-          is_preview_available: is_preview_available === 'true' || is_preview_available === true,
-          preview_duration: preview_duration ? parseInt(preview_duration) : 0,
-          duration: 0, // Will be updated when video is processed or via webhook
-          file_size: videoFile.size,
-          is_active: true
-        });
-
-       // Clean up temp file
-       fs.unlinkSync(tempPath);
-
-       return res.json({
-         id: lesson.id,
-         title: lesson.title,
-         bunny_url: lesson.bunny_url,
-         thumbnail_url: lesson.thumbnail_url,
-         video_guid: lesson.video_guid,
-         transcoding_status: lesson.transcoding_status
-       });
-     } catch (uploadError) {
-       // Clean up temp file on error
-       if (fs.existsSync(tempPath)) {
-         fs.unlinkSync(tempPath);
-       }
-       throw uploadError;
-     }
-   } catch (err) {
-     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-   }
- });
-
-router.get('/admin_lessons/presigned-url', async (req: Request, res: Response) => {
-  try {
-    const { fileName, fileType } = req.query;
-    if (!fileName || !fileType) {
-      return res.status(400).json({ error: 'fileName and fileType are required' });
-    }
-    // Generate presigned URL for S3 upload
-    // This should integrate with your S3 service
-    return res.status(501).json({ error: 'Presigned URL generation not implemented' });
-  } catch (err) {
+    console.error('Error resending marketer credentials:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });

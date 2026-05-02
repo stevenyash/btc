@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useCallback, useEffect, useState } from "react"
 import { 
   Users, 
   Plus, 
@@ -9,7 +10,9 @@ import {
   XCircle,
   UserPlus,
   Copy,
-  Search
+  Search,
+  Mail,
+  Loader2
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -36,25 +39,18 @@ export default function MarketerManagementPage() {
   const [total, setTotal] = useState(0)
   const [createMode, setCreateMode] = useState<"existing" | "new">("existing")
   const [newMarketer, setNewMarketer] = useState({ name: "", email: "", phone: "", referral_code: "" })
+  const [resendingCredentials, setResendingCredentials] = useState<number | null>(null)
 
-  useEffect(() => {
-    fetchMarketers()
-    fetchAvailableUsers()
-  }, [currentPage])
-
-  const fetchMarketers = async () => {
-    setIsLoading(true)
+  const fetchMarketers = useCallback(async (page: number) => {
     try {
-      const response = await adminService.getMarketers(currentPage, 20)
+      const response = await adminService.getMarketers(page, 20)
       setMarketers(response.data)
       setTotal(response.total)
       setTotalPages(Math.ceil(response.total / 20))
     } catch (error) {
       console.error("Failed to fetch marketers:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
   const fetchAvailableUsers = async () => {
     try {
@@ -64,6 +60,14 @@ export default function MarketerManagementPage() {
       console.error("Failed to fetch available users:", error)
     }
   }
+
+  useEffect(() => {
+    setIsLoading(true)
+    Promise.all([
+      fetchMarketers(currentPage),
+      fetchAvailableUsers()
+    ]).finally(() => setIsLoading(false))
+  }, [currentPage, fetchMarketers])
 
   const handleCreateMarketer = async () => {
     if (createMode === "existing" && !selectedUser) return
@@ -82,7 +86,7 @@ export default function MarketerManagementPage() {
       setIsModalOpen(false)
       setSelectedUser(null)
       setNewMarketer({ name: "", email: "", phone: "", referral_code: "" })
-      fetchMarketers()
+      fetchMarketers(currentPage)
       fetchAvailableUsers()
       toast.success("Marketer created successfully")
     } catch (error: any) {
@@ -93,17 +97,30 @@ export default function MarketerManagementPage() {
     }
   }
 
-  const handleDeleteMarketer = async (id: number) => {
+    const handleDeleteMarketer = async (id: number) => {
     if (!confirm("Are you sure you want to remove this marketer?")) return
     
     setIsLoading(true)
     try {
       await adminService.deleteMarketer(id)
-      fetchMarketers()
+      fetchMarketers(currentPage)
     } catch (error) {
       console.error("Failed to delete marketer:", error)
     } finally {
       setIsLoading(false)
+    }
+  }
+  
+  const handleResendCredentials = async (marketer: Marketer) => {
+    setResendingCredentials(marketer.id)
+    try {
+      await adminService.resendMarketerCredentials(marketer.id)
+      toast.success("Credentials resent successfully")
+    } catch (error: any) {
+      console.error("Failed to resend credentials:", error)
+      toast.error(error?.response?.data?.error || "Failed to resend credentials")
+    } finally {
+      setResendingCredentials(null)
     }
   }
 
@@ -113,7 +130,7 @@ export default function MarketerManagementPage() {
     setIsLoading(true)
     try {
       await adminService.updateMarketer(marketer.id, { status: newStatus })
-      fetchMarketers()
+      fetchMarketers(currentPage)
     } catch (error) {
       console.error("Failed to update marketer:", error)
     } finally {
@@ -211,7 +228,14 @@ export default function MarketerManagementPage() {
                 </div>
                 <Button 
                   variant="outline"
-                  onClick={fetchMarketers}
+                  onClick={async () => {
+                    setIsLoading(true)
+                    try {
+                      await fetchMarketers(currentPage)
+                    } finally {
+                      setIsLoading(false)
+                    }
+                  }}
                   disabled={isLoading}
                 >
                   <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -275,62 +299,84 @@ export default function MarketerManagementPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="py-3 px-4">
-                              <div className="text-sm">
-                                <p>Invites: <span className="font-semibold">{marketer.total_invites || 0}</span></p>
-                                <p>Active: <span className="font-semibold text-green-600">{marketer.active_referrals || 0}</span></p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="text-sm">
-                                <p className="font-semibold text-green-600">
-                                  KES {formatCurrency(marketer.total_earnings || 0)}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  Pending: KES {formatCurrency(marketer.pending_earnings || 0)}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <Badge 
-                                className={marketer.status === "active" ? "bg-green-500" : "bg-red-500"}
-                              >
-                                {marketer.status === "active" ? (
-                                  <><CheckCircle className="h-3 w-3 mr-1" />Active</>
-                                ) : (
-                                  <><XCircle className="h-3 w-3 mr-1" />Inactive</>
-                                )}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-muted-foreground">
-                              {formatDate(marketer.created_at)}
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm"
-                                  onClick={() => handleToggleStatus(marketer)}
-                                >
-                                  {marketer.status === "active" ? (
-                                    <XCircle className="h-4 w-4 text-red-500" />
-                                  ) : (
-                                    <CheckCircle className="h-4 w-4 text-green-500" />
-                                  )}
-                                </Button>
-                                <CanI action="delete" resource="marketers">
-                                  {can => can && (
+                                <td className="py-3 px-4">
+                                  <div className="text-sm">
+                                    <p>Invites: <span className="font-semibold">{marketer.total_invites || 0}</span></p>
+                                    <p>Active: <span className="font-semibold text-green-600">{marketer.active_referrals || 0}</span></p>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="text-sm">
+                                    <p className="font-semibold text-green-600">
+                                      KES {formatCurrency(marketer.total_earnings || 0)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Pending: KES {formatCurrency(marketer.pending_earnings || 0)}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <Badge 
+                                    className={marketer.status === "active" ? "bg-green-500" : "bg-red-500"}
+                                  >
+                                    {marketer.status === "active" ? (
+                                      <><CheckCircle className="h-3 w-3 mr-1" />Active</>
+                                    ) : (
+                                      <><XCircle className="h-3 w-3 mr-1" />Inactive</>
+                                    )}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-4 text-sm text-muted-foreground">
+                                  {formatDate(marketer.created_at)}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex justify-end gap-2">
                                     <Button 
                                       variant="ghost" 
                                       size="sm"
-                                      onClick={() => handleDeleteMarketer(marketer.id)}
+                                      onClick={() => handleToggleStatus(marketer)}
                                     >
-                                      <Trash2 className="h-4 w-4 text-red-500" />
+                                      {marketer.status === "active" ? (
+                                        <XCircle className="h-4 w-4 text-red-500" />
+                                      ) : (
+                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                      )}
                                     </Button>
-                                  )}
-                                </CanI>
-                              </div>
-                            </td>
+                                    <CanI action="delete" resource="marketers">
+                                      {can => can && (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={() => handleDeleteMarketer(marketer.id)}
+                                        >
+                                          <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                      )}
+                                    </CanI>
+                                    <CanI action="resendCredentials" resource="marketers">
+                                      {can => can && (
+                                     <Button 
+                                       variant="ghost" 
+                                       size="sm"
+                                       onClick={() => handleResendCredentials(marketer)}
+                                       disabled={resendingCredentials === marketer.id}
+                                     >
+                                       {resendingCredentials === marketer.id ? (
+                                         <>
+                                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                           Sending...
+                                         </>
+                                       ) : (
+                                         <>
+                                           <Mail className="mr-2 h-4 w-4" />
+                                           Resend Credentials
+                                         </>
+                                       )}
+                                     </Button>
+                                      )}
+                                    </CanI>
+                                  </div>
+                                </td>
                           </tr>
                         ))}
                       </tbody>

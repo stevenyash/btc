@@ -1,5 +1,4 @@
-import { api, tokenService } from "./api";
-export { api, tokenService };
+import { api } from "./api";
 
 export interface User {
   id: string;
@@ -24,7 +23,7 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  token: string;
+  message?: string;
   user?: User;
 }
 
@@ -35,17 +34,16 @@ export const authService = {
       usercode: data.code,
     };
     const response = await api.post("/auth/login", loginRequest);
-    if (response.data.token) {
-      tokenService.setToken(response.data.token);
-    }
+    // JWT token is now set as httpOnly cookie by server, no need to store
     return response.data;
   },
 
   logout: async () => {
     try {
       await api.post("/auth/logout");
-    } finally {
-      tokenService.removeToken();
+      // Server clears the httpOnly cookie, no need to remove from localStorage
+    } catch (error) {
+      console.error("Logout error:", error);
     }
   },
 

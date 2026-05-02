@@ -42,7 +42,6 @@ export default function InvitesPage() {
   const [newInvite, setNewInvite] = useState({ invitee_email: "", invitee_phone: "" })
 
   const fetchInvites = useCallback(async () => {
-    setIsLoading(true)
     try {
        const response = await api.get("/invites", {
          params: {
@@ -51,47 +50,45 @@ export default function InvitesPage() {
            search: searchQuery || undefined
          }
        })
-      
-      let invitesData: Invite[] = []
-      let totalCount = 0
-      
-      if (Array.isArray(response.data)) {
-        invitesData = response.data as Invite[]
-        totalCount = invitesData.length
-      } else if (response.data && typeof response.data === 'object') {
-        const data = response.data as any
-        
-        if (Array.isArray(data.records)) {
-          invitesData = data.records as Invite[]
-          totalCount = data.totalRecords || invitesData.length
-        } else if (Array.isArray(data.data)) {
-          invitesData = data.data as Invite[]
-          totalCount = data.total || invitesData.length
-        } else if (data.id) {
-          invitesData = [data] as Invite[]
-          totalCount = 1
-        }
-      }
-      
-      setInvites(invitesData)
-      setTotal(totalCount)
-      setTotalPages(Math.ceil(totalCount / 20))
-    } catch (error: any) {
-      console.error("Failed to fetch invites:", error)
-      toast.error(`Failed to fetch invites: ${error.response?.status || 'Network error'}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [currentPage, searchQuery])
+       
+       let invitesData: Invite[] = []
+       let totalCount = 0
+       
+       if (Array.isArray(response.data)) {
+         invitesData = response.data as Invite[]
+         totalCount = invitesData.length
+       } else if (response.data && typeof response.data === 'object') {
+         const data = response.data as any
+         
+         if (Array.isArray(data.records)) {
+           invitesData = data.records as Invite[]
+           totalCount = data.totalRecords || invitesData.length
+         } else if (Array.isArray(data.data)) {
+           invitesData = data.data as Invite[]
+           totalCount = data.total || invitesData.length
+         } else if (data.id) {
+           invitesData = [data] as Invite[]
+           totalCount = 1
+         }
+       }
+       
+       setInvites(invitesData)
+       setTotal(totalCount)
+       setTotalPages(Math.ceil(totalCount / 20))
+     } catch (error: any) {
+       console.error("Failed to fetch invites:", error)
+       toast.error(`Failed to fetch invites: ${error.response?.status || 'Network error'}`)
+     }
+   }, [currentPage, searchQuery])
 
-  useEffect(() => {
-    fetchInvites()
-  }, [fetchInvites])
+   useEffect(() => {
+     setIsLoading(true)
+     fetchInvites().finally(() => setIsLoading(false))
+   }, [fetchInvites])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    fetchInvites()
   }
 
   const handleAddInvite = async (e: React.FormEvent) => {
@@ -104,7 +101,12 @@ export default function InvitesPage() {
       toast.success("Invite sent successfully")
       setShowAddModal(false)
       setNewInvite({ invitee_email: "", invitee_phone: "" })
-      fetchInvites()
+      setIsLoading(true)
+      try {
+        await fetchInvites()
+      } finally {
+        setIsLoading(false)
+      }
     } catch (error) {
       console.error("Failed to send invite:", error)
       toast.error("Failed to send invite")
@@ -113,13 +115,16 @@ export default function InvitesPage() {
 
   const handleDeleteInvite = async (id: number) => {
     if (!confirm("Are you sure you want to delete this invite?")) return
+    setIsLoading(true)
     try {
       await api.get(`/invites/delete/${id}`)
       toast.success("Invite deleted successfully")
-      fetchInvites()
+      await fetchInvites()
     } catch (error) {
       console.error("Failed to delete invite:", error)
       toast.error("Failed to delete invite")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -167,7 +172,10 @@ export default function InvitesPage() {
                 <Search className="h-4 w-4 mr-2" />
                 Search
               </Button>
-              <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); fetchInvites(); }}>
+              <Button type="button" variant="outline" onClick={() => {
+                setSearchQuery("")
+                setCurrentPage(1)
+              }}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>

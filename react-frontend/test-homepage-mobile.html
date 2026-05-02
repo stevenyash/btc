@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomePage Mobile Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .test-container { max-width: 375px; border: 2px solid #333; margin: 20px auto; padding: 10px; }
+        .section { margin: 20px 0; padding: 10px; border: 1px solid #ddd; }
+        .issue { background: #ffebee; border-left: 4px solid #f44336; padding: 10px; margin: 10px 0; }
+        .warning { background: #fff3e0; border-left: 4px: #ff9800; padding: 10px; margin: 10px 0; }
+        .ok { background: #e8f5e8; border-left: 4px; #4caf50; padding: 10px; margin: 10px 0; }
+        h1, h2, h3 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>HomePage Mobile Responsiveness Test</h1>
+    <p>Test viewport: 375px (iPhone SE)</p>
+    
+    <div class="test-container">
+        <h2>Hero Section</h2>
+        <div class="section">
+            <h3 style="font-size: 24px;">Unlock Your Potential with <span style="color: #3b82f6;">Expert-Led Learning</span></h3>
+            <p style="font-size: 16px; line-height: 1.5;">Access quality education from anywhere. Learn at your own pace with video lessons.</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin: 20px 0;">
+                <button style="padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 6px;">Start Learning</button>
+                <button style="padding: 12px 24px; background: transparent; border: 1px solid #666; border-radius: 6px;">Learn More</button>
+            </div>
+        </div>
+
+        <div class="issue">
+            <strong>⚠️ ISSUE: Divider Lines Too Thin</strong><br>
+            The 1px dividers between stats may be barely visible on mobile screens.
+        </div>
+
+        <div class="issue">
+            <strong>⚠️ ISSUE: 2-Column Stats Cramped</strong><br>
+            On 375px screens, 2 columns with padding leaves ~160px per column - very tight.
+        </div>
+
+        <div class="ok">
+            <strong>✓ GOOD: Flex Column Layout</strong><br>
+            Buttons stack vertically - good for touch targets.
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>Feature Cards (3 in row)</h2>
+        <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+            <div class="section">
+                <h4>Video Lessons</h4>
+                <p>Access high-quality tutorials</p>
+            </div>
+            <div class="section">
+                <h4>Structured Learning</h4>
+                <p>Well-organized curriculum</p>
+            </div>
+            <div class="section">
+                <h4>Expert Tutors</h4>
+                <p>Learn from qualified educators</p>
+            </div>
+        </div>
+        <div class="ok">
+            <strong>✓ GOOD: Single Column on Mobile</strong><br>
+            md:grid-cols-2 → grid-cols-1 works correctly.
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>Course Cards (4 in row)</h2>
+        <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+            <div class="section">
+                <div style="height: 120px; background: #ddd; display: flex; align-items: center; justify-content: center;">Image</div>
+                <h4 style="margin: 10px 0 5px;">Mathematics Fundamentals</h4>
+                <p style="font-size: 12px; color: #666;">24 lessons • 12 hours</p>
+            </div>
+        </div>
+        <div class="ok">
+            <strong>✓ GOOD: Single Column Layout</strong><br>
+            lg:grid-cols-4 → grid-cols-1 is correct.
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>Stats Section Issue</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="section" style="text-align: center;">
+                <h3 style="font-size: 32px;">10K+</h3>
+                <p style="font-size: 12px;">Students</p>
+            </div>
+            <div class="section" style="text-align: center;">
+                <h3 style="font-size: 32px;">500+</h3>
+                <p style="font-size: 12px;">Lessons</p>
+            </div>
+        </div>
+        <div class="issue">
+            <strong>⚠️ PROBLEM: Text Overflow Risk</strong><br>
+            At 375px width with 2 columns, each has ~160px. 
+            Large font (text-4xl = 2.25rem ≈ 36px) may overflow.
+        </div>
+    </div>
+
+    <h2>Key Findings</h2>
+    <div class="issue">
+        <strong>1. DIVIDER LINES TOO THIN</strong><br>
+        Code: &lt;div className="w-px h-12 bg-border" /&gt;<br>
+        Fix: Use min-width or conditional rendering for mobile<br>
+        Suggestion: w-[1px] or border-l border-border on mobile
+    </div>
+
+    <div class="issue">
+        <strong>2. TWO-COLUMN STATS ON MOBILE</strong><br>
+        Code: grid-cols-2 md:grid-cols-4<br>
+        Problem: 375px / 2 = ~160px per column (tight)<br>
+        Fix: Single column on mobile<br>
+        Suggestion: grid-cols-1 md:grid-cols-4 (or gap-4)
+    </div>
+
+    <div class="issue">
+        <strong>3. HERO TITLE FONT SIZE</strong><br>
+        Code: text-4xl lg:text-5xl<br>
+        Problem: text-4xl ≈ 36px on 375px screen<br>
+        May cause horizontal scroll if container has padding<br>
+        Check: Test with actual long text
+    </div>
+
+    <div class="ok">
+        <strong>4. GOOD PRACTICES USED</strong><br>
+        - Responsive breakpoints (sm:, md:, lg:) ✓<br>
+        - Mobile-first approach ✓<br>
+        - flex-col → flex-row transitions ✓<br>
+        - Appropriate image sizing ✓
+    </div>
+
+    <h2>Recommendation</h2>
+    <p>Priority fixes needed:</p>
+    <ol>
+        <li>Change stats to 1 column on mobile OR reduce font size</li>
+        <li>Remove or hide divider lines on small screens</li>
+        <li>Test with longest possible text to prevent overflow</li>
+        <li>Verify CTA button sizes are ≥44px touch targets</li>
+    </ol>
+</body>
+</html>

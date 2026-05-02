@@ -202,12 +202,12 @@ export default function SubscriberDashboardPage() {
                               <p className="text-sm font-medium text-muted-foreground">Package Name</p>
                               <p className="text-lg font-semibold">{currentPackage.name}</p>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-muted-foreground">Subscription Type</p>
-                              <p className="text-lg font-semibold">
-                                 {currentPackage['subscription_type.name'] || "Standard"}
-                              </p>
-                            </div>
+                             <div>
+                               <p className="text-sm font-medium text-muted-foreground">Subscription Type</p>
+                               <p className="text-lg font-semibold">
+                                  {currentPackage.subscription_type?.name || "Standard"}
+                               </p>
+                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Total Lessons</p>
                               <p className="text-lg font-semibold">{currentPackage.no_of_lessons}</p>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { 
   RefreshCw, 
   CheckCircle, 
@@ -46,17 +46,12 @@ export default function AdminWithdrawalsPage() {
   const [total, setTotal] = useState(0)
   const [stats, setStats] = useState({ pending: 0, processing: 0, completed: 0, failed: 0 })
 
-  useEffect(() => {
-    fetchWithdrawals()
-  }, [currentPage, statusFilter])
-
-  const fetchWithdrawals = async () => {
-    setIsLoading(true)
+  const fetchWithdrawals = useCallback(async (page: number, status: string) => {
     try {
       const response = await api.get("/admin/marketer-withdrawals", {
         params: {
-          status: statusFilter,
-          page: currentPage,
+          status: status,
+          page: page,
           limit: 20
         }
       })
@@ -78,10 +73,8 @@ export default function AdminWithdrawalsPage() {
     } catch (error) {
       console.error("Failed to fetch withdrawals:", error)
       toast.error("Failed to load withdrawal requests")
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
   const fetchStats = async () => {
     try {
@@ -112,6 +105,11 @@ export default function AdminWithdrawalsPage() {
   }
 
   useEffect(() => {
+    setIsLoading(true)
+    fetchWithdrawals(currentPage, statusFilter).finally(() => setIsLoading(false))
+  }, [currentPage, statusFilter, fetchWithdrawals])
+
+  useEffect(() => {
     fetchStats()
   }, [])
 
@@ -122,8 +120,15 @@ export default function AdminWithdrawalsPage() {
       
       if (response.data?.success) {
         toast.success(action === "approve" ? "Withdrawal approved and payment initiated" : "Withdrawal rejected")
-        fetchWithdrawals()
-        fetchStats()
+        setIsLoading(true)
+        try {
+          await Promise.all([
+            fetchWithdrawals(currentPage, statusFilter),
+            fetchStats()
+          ])
+        } finally {
+          setIsLoading(false)
+        }
       } else {
         throw new Error(response.data?.error || "Failed to process withdrawal")
       }
@@ -277,7 +282,14 @@ export default function AdminWithdrawalsPage() {
                 <Badge variant="outline" className="text-sm">
                   Total: {total}
                 </Badge>
-                <Button variant="outline" size="sm" onClick={fetchWithdrawals} disabled={isLoading}>
+                <Button variant="outline" size="sm" onClick={async () => {
+                  setIsLoading(true)
+                  try {
+                    await fetchWithdrawals(currentPage, statusFilter)
+                  } finally {
+                    setIsLoading(false)
+                  }
+                }} disabled={isLoading}>
                   <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </Button>
               </div>

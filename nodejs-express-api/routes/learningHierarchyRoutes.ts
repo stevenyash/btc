@@ -126,6 +126,9 @@ router.get('/areas/:areaId/lessons', async (req: Request, res: Response) => {
 router.get('/filtered-lessons', async (req: Request, res: Response) => {
   try {
     const { area_id, topic_id, subtopic_id, search } = req.query;
+
+    const searchStr = typeof search === 'string' ? search : '';
+    const searchLower = searchStr.toLowerCase();
     const where: any = { is_active: true };
 
     if (area_id) where.area_id = area_id;
@@ -191,9 +194,8 @@ router.get('/filtered-lessons', async (req: Request, res: Response) => {
 
     // Apply search filter if provided
     let results = transformedLessons;
-    if (search) {
-      const searchLower = search.toLowerCase();
-      results = transformedLessons.filter((l: any) => 
+    if (searchStr) {
+      results = transformedLessons.filter((l: any) =>
         l.title.toLowerCase().includes(searchLower) ||
         l.area.toLowerCase().includes(searchLower) ||
         l.topic.toLowerCase().includes(searchLower) ||

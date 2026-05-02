@@ -15,17 +15,17 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex min-h-screen flex-col">
+      <Header />
       {isAuthenticated ? (
         <>
           <Sidebar />
-          <main className={`flex-1 md:ml-64 pt-0 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'}`}>
+          <main className={`flex-1 pt-14 md:pt-16 md:ml-64 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'}`}>
             {children}
           </main>
         </>
       ) : (
         <>
-          <Header />
-          <main className="flex-1 pt-10 md:pt-12">
+          <main className="flex-1 pt-14 md:pt-16">
             {children}
           </main>
         </>

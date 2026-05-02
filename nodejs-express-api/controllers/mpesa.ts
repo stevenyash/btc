@@ -2,12 +2,7 @@ import express, { Request, Response } from "express";
 import { Op } from "sequelize";
 import mpesaService from "../helpers/MpesaService.js";
 import {
-  StkPushRequest,
-  StkPushResponse,
-  StkQueryResponse,
-  MpesaCallbackBody,
-  MpesaPaymentResult,
-} from "../types/mpesa.js";
+  StkPushRequest} from "../types/mpesa.js";
 import DB, { op as sequelizeOp } from "../models/db.js";
 import { sendSms } from "../helpers/sms.js";
 import mailer from "../helpers/mailer.js";
@@ -24,7 +19,6 @@ MpesaController.post("/push", async (req: Request, res: Response): Promise<void>
       amount,
       phoneNumber,
       accountReference,
-      transactionDesc,
       businessMetadata,
     }: StkPushRequest = req.body;
 
@@ -744,7 +738,6 @@ export async function subscriptionActivation(
     }
     const userPhone = String(phoneNumber || record.phoneNumber);
     const userEmail = email as string | null || null;
-    const userName = (name as string | undefined) || userPhone;
     const subscriptionPlan = await DB.SubscriptionTypes.findOne({ where: { id: Number(businessPlanId) } });
     if (!subscriptionPlan) {
       return { success: false, error: "Invalid plan ID" };
@@ -834,7 +827,6 @@ export async function subscriptionActivation(
       amount_paid: record.amount,
       expiry_date: expiryDateForLessons,
     });
-    const purchaseId = purchase.id;
     const packageIdForLessons = packageRecord.id;
     const lessontrack = await DB.LessonTrack.findOne({
       where: { user_id: userId, subscription_id: subscriptionId }
@@ -951,7 +943,6 @@ export async function packageActivation(
     }
     const userPhone = String(phoneNumber || record.phoneNumber) as string;
     const userEmail = email as string | null || null;
-    const userName = name as string | undefined || userPhone;
 
     // Look up the specific package
     const packageRecord = await DB.Packages.findOne({
@@ -1050,15 +1041,6 @@ export async function packageActivation(
     }
 
     // Create purchase record
-    const purchase = await DB.Purchases.create({
-      user_id: userId,
-      package_id: packageRecord.id,
-      transaction_date: startDate,
-      transaction_status: 'success',
-      payment_reference: checkoutRequestID,
-      amount_paid: record.amount,
-      expiry_date: expiryDateForLessons,
-    });
 
     // Find existing lesson track for this subscription
     const lessontrack = await DB.LessonTrack.findOne({
@@ -1138,7 +1120,6 @@ export async function packageActivation(
 
     // Create transaction record
     try {
-      const subscriptionType = await DB.SubscriptionTypes.findOne({ where: { id: subscriptionTypeId } });
       const transaction = await DB.Transactions.create({
         user_id: userId,
         phone_number: userPhone,

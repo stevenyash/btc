@@ -38,7 +38,7 @@ export default function PackagesPage() {
   }
 
    const groupedPackages = apiPackages.reduce<Record<string, typeof apiPackages>>((acc, pkg) => {
-     const key = pkg['subscription_type.name'] || "Other"
+     const key = pkg.subscription_type?.name ?? 'Other'
      if (!acc[key]) acc[key] = []
      acc[key].push(pkg)
      return acc

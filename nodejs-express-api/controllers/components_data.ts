@@ -202,8 +202,7 @@ router.get('/lesson/:id', async (req: Request, res: Response) => {
 router.get('/subscription_types', async (req: Request, res: Response) => {
   try {
     const types = await DB.SubscriptionTypes.findAll({
-      where: { is_active: true },
-      attributes: ['id', 'name', 'membership_fee', 'months', 'description', 'features'],
+      attributes: ['id', 'name', 'membership_fee', 'months', 'description'],
       order: [['months', 'ASC']],
       raw: true
     });
@@ -248,7 +247,7 @@ router.get('/packages_public', async (req: Request, res: Response) => {
 // GUEST & USER MANAGEMENT ENDPOINTS
 // ============================================
 
-// Verify phone number
+// Verify phone number - returns true for pure guests (no user account), false if already registered
 router.get('/verify_phone/:phone', async (req: Request, res: Response) => {
   try {
     const { phone } = req.params;
@@ -259,24 +258,26 @@ router.get('/verify_phone/:phone', async (req: Request, res: Response) => {
     const phoneString = Array.isArray(phone) ? phone[0] : phone;
     const cleanPhone = phoneString.replace(/^0/, "254").replace(/\D/g, "");
     
-    const user = await DB.Users.findOne({
+    const user = await DB.Users.findOne({ 
       where: { phone: cleanPhone },
       attributes: ['id', 'username', 'phone', 'account_status', 'user_role_id'],
       raw: true
     });
     
-    if (user && user.account_status === 'Active') {
+    // If phone exists in Users table, it's a registered user (not a pure guest)
+    // Return verified=false so they log in properly instead of using guest access
+    if (user) {
       return res.json({ 
-        verified: true, 
-        isNew: false, 
-        phone: cleanPhone,
-        user_id: user.id,
-        username: user.username
+        verified: false, 
+        isRegisteredUser: true,
+        message: "Phone number already registered. Please log in instead.",
+        phone: cleanPhone 
       });
     }
     
+    // For pure guests: no user account exists, phone is valid for guest access
     return res.json({ 
-      verified: false, 
+      verified: true, 
       isNew: true, 
       phone: cleanPhone 
     });
@@ -286,13 +287,13 @@ router.get('/verify_phone/:phone', async (req: Request, res: Response) => {
   }
 });
 
-// Register guest user
+// Register guest - validates phone and marks as verified for guest access
+// Guests do NOT become subscribers - they are tracked via phone for lesson purchases only
 router.post('/register_guest', [
   body('phone').not().isEmpty().isMobilePhone('any'),
-  body('username').optional({ nullable: true, checkFalsy: true }),
 ], validateFormData as any, async (req: Request, res: Response) => {
   try {
-    const { phone, username } = req.body;
+    const { phone } = req.body;
     const phoneString = Array.isArray(phone) ? phone[0] : phone;
     const cleanPhone = phoneString.replace(/^0/, "254").replace(/\D/g, "");
     
@@ -300,100 +301,27 @@ router.post('/register_guest', [
       return res.status(400).json({ error: "Invalid phone number. Use format: 07XXXXXXXX or 254XXXXXXXXXX" });
     }
 
-    // Check if user already exists
+    // Check if this phone belongs to an existing registered user
     const existingUser = await DB.Users.findOne({ 
       where: { phone: cleanPhone },
       attributes: ['id', 'account_status']
     });
     
     if (existingUser) {
-      // If user exists but is inactive, reactivate
-      if ((existingUser as any).account_status !== 'Active') {
-        await DB.Users.update(
-          { account_status: 'Active', status: 1 },
-          { where: { phone: cleanPhone } }
-        );
-        
-        const generatedUsercode = crypto.randomBytes(4).toString("hex").toUpperCase();
-        
-        return res.json({ 
-          success: true,
-          verified: true,
-          isNew: false,
-          isReactivated: true,
-          phone: cleanPhone,
-          user_id: (existingUser as any).id,
-          usercode: generatedUsercode,
-          message: "Account reactivated successfully"
-        });
-      }
-      
-      return res.status(409).json({ error: "Phone number already registered" });
+      // Phone belongs to a registered user - they should log in properly, not use guest access
+      return res.status(409).json({ error: "Phone number already registered. Please log in instead." });
     }
 
-    // Get Subscriber role
-    const guestRole = await DB.Roles.findOne({ 
-      where: { role_name: 'Subscriber' },
-      attributes: ['role_id']
-    });
-    const guestRoleId = (guestRole as any)?.role_id || 3;
-    
-    // Generate unique credentials
-    const generatedUsercode = crypto.randomBytes(6).toString("hex").toUpperCase(); // Increased to 6 bytes for better uniqueness
-    let guestUsername = username || `guest_${cleanPhone.slice(-6)}`;
-    
-    // Check if username exists
-    const existingUsername = await DB.Users.findOne({
-      where: { username: guestUsername },
-      attributes: ['id']
-    });
-    
-    if (existingUsername) {
-      guestUsername = `${guestUsername}_${crypto.randomBytes(2).toString("hex")}`;
-    }
-    
-    const userData = {
-      username: guestUsername,
-      phone: cleanPhone,
-      usercode: utils.usercodeHash(generatedUsercode),
-      user_role_id: guestRoleId,
-      account_status: 'Active',
-      status: 1,
-    };
-
-    const newUser = await DB.Users.create(userData);
-    const userId = (newUser as any).id;
-    
-    // Create welcome notification
-    try {
-      if (DB.Notifications) {
-        await DB.Notifications.create({
-          user_id: userId,
-          title: 'Welcome to the Platform!',
-          message: `Your guest account has been created successfully. Your usercode is: ${generatedUsercode}. Please save it for future access.`,
-          type: 'welcome',
-          is_read: false
-        });
-      }
-    } catch (notifError) {
-      console.warn('Could not create welcome notification:', notifError);
-    }
-    
-    return res.status(201).json({ 
+    // For pure guests: just validate phone format and return success
+    // No user account is created - guest is tracked by phone in localStorage and purchases
+    return res.status(200).json({ 
       success: true,
       verified: true,
-      isNew: true,
+      isNew: false,
       phone: cleanPhone,
-      user_id: userId,
-      username: guestUsername,
-      usercode: generatedUsercode,
-      message: "Guest account created successfully",
-      instructions: "Please save your usercode for future access"
+      message: "Phone verified for guest access"
     });
   } catch (err: any) {
-    if (err.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({ error: "Phone number already registered" });
-    }
     console.error("Guest registration error:", err);
     return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to register guest" });
   }
@@ -567,16 +495,19 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
           expiresAt.setDate(expiresAt.getDate() + 30);
         }
 
-        // Get watch time
-        const watchRecord = await DB.GuestWatchTime.findOne({
-          where: { phone: cleanPhone, lesson_id: lessonId },
-          attributes: ['watch_time_seconds']
+        // Get watch time from LessonAccessLogs
+        const watchRecord = await DB.LessonAccessLogs.findOne({
+          where: { 
+            lesson_id: lessonId,
+            phone: cleanPhone
+          },
+          attributes: ['watch_time']
         });
 
         return {
           lesson_id: lessonId,
           purchased,
-          watch_time: watchRecord?.watch_time_seconds || 0,
+          watch_time: watchRecord?.watch_time || 0,
           max_watch_time: maxWatchTime,
           expires_at: expiresAt?.toISOString() || null,
           is_preview_available: (lesson as any)?.is_preview_available || false,
@@ -728,6 +659,7 @@ router.post('/guest_update_watch_time', async (req: Request, res: Response) => {
       
       watchRecord = await DB.LessonAccessLogs.create({
         user_id: guestId,
+        phone: guestPhone,
         lesson_id: lesson_id,
         watch_time: newWatchTime,
         status: isComplete ? 'completed' : 'active',
@@ -741,15 +673,6 @@ router.post('/guest_update_watch_time', async (req: Request, res: Response) => {
       
       currentWatchTime = newWatchTime;
     }
-    
-    // Update guest watch time table
-    await DB.GuestWatchTime.upsert({
-      phone: guestPhone,
-      lesson_id: lesson_id,
-      watch_time_seconds: currentWatchTime,
-      session_id: session_id,
-      updated_at: new Date()
-    });
     
     // Mark transaction as completed if lesson is finished
     if (isComplete) {
@@ -1107,6 +1030,83 @@ router.get('/search', async (req: Request, res: Response) => {
     console.error('Search error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+// Get membership expiry status
+router.get('/membershipexpire', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'User not authenticated' });
+        }
+
+        const subscription = await DB.Subscriptions.findOne({
+            where: { 
+                user_id: String(userId), 
+                status: 'active',
+                expiry_date: { [DB.Sequelize.Op.gte]: new Date() }
+            },
+            raw: true
+        });
+
+        const isExpired = !subscription || subscription.expiry_date < new Date();
+        return res.json({ 
+            success: true, 
+            expired: isExpired,
+            expiryDate: subscription ? subscription.expiry_date : null,
+            daysRemaining: subscription ? Math.ceil((new Date(subscription.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0
+        });
+    } catch (err) {
+        console.error('Error checking membership expiry:', err);
+        return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+});
+
+// Check user activity
+router.get('/check_user_activity', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'User not authenticated' });
+        }
+
+        // Get recent lesson access logs
+        const recentActivity = await DB.LessonAccessLogs.findAll({
+            where: { user_id: userId },
+            order: [['accessed_at', 'DESC']],
+            limit: 10,
+            attributes: ['lesson_id', 'watch_time', 'status', 'accessed_at'],
+            include: [
+                {
+                    model: DB.Lessons,
+                    as: 'lesson',
+                    attributes: ['id', 'title', 'thumbnail_url']
+                }
+            ],
+            raw: true,
+            nest: true
+        });
+
+        // Get recent transactions
+        const recentTransactions = await DB.Transactions.findAll({
+            where: { user_id: userId },
+            order: [['created_at', 'DESC']],
+            limit: 5,
+            attributes: ['id', 'amount', 'status', 'created_at', 'checkoutRequestID'],
+            raw: true
+        });
+
+        return res.json({ 
+            success: true, 
+            activity: {
+                lessonAccess: recentActivity,
+                transactions: recentTransactions
+            }
+        });
+    } catch (err) {
+        console.error('Error checking user activity:', err);
+        return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
 });
 
 export default router;

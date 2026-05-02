@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { adminService, type Package, type CreatePackageData } from "@/services/admin"
+import { adminService, type Package } from "@/services/admin"
 import Layout from "@/components/Layout"
 import { WithPermission } from "@/components/WithPermission"
 
@@ -14,16 +14,17 @@ const DURATION_UNITS = ["day", "week", "month", "year"]
 
 export default function AdminPackagesPage() {
   const [packages, setPackages] = useState<Package[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [subscriptionTypes, setSubscriptionTypes] = useState<{ id: number; name: string }[]>([])
-  
   const [showModal, setShowModal] = useState(false)
   const [editingPackage, setEditingPackage] = useState<Package | null>(null)
-  const [formData, setFormData] = useState<CreatePackageData>({
+  const [isLoading, setIsLoading] = useState(false)
+  
+  // ✅ ADD MISSING formData state
+  const [formData, setFormData] = useState({
     subscription_type_id: 0,
     name: "",
     description: "",
@@ -34,15 +35,11 @@ export default function AdminPackagesPage() {
     duration_unit: "month"
   })
 
-  useEffect(() => {
-    fetchPackages()
-    fetchSubscriptionTypes()
-  }, [currentPage])
-
-  const fetchPackages = async () => {
+  // ✅ Fix: Pass page parameter
+  const fetchPackages = async (page: number) => {
     setIsLoading(true)
     try {
-      const response = await adminService.getPackages(currentPage, 20)
+      const response = await adminService.getPackages(page, 20)
       const packagesData = response.data
       setPackages(Array.isArray(packagesData) ? packagesData : [])
       setTotal(response.total)
@@ -56,19 +53,26 @@ export default function AdminPackagesPage() {
     }
   }
 
-   const fetchSubscriptionTypes = async () => {
-     try {
-       const response = await adminService.getSubscriptionTypes()
-       setSubscriptionTypes(response.data)
-     } catch (error) {
-       console.error("Failed to fetch subscription types:", error)
-     }
-   }
+  const fetchSubscriptionTypes = async () => {
+    try {
+      const response = await adminService.getSubscriptionTypes()
+      setSubscriptionTypes(response.data)
+    } catch (error) {
+      console.error("Failed to fetch subscription types:", error)
+    }
+  }
 
+  // ✅ Fix: Pass currentPage to fetchPackages
+  useEffect(() => {
+    fetchPackages(currentPage)
+    fetchSubscriptionTypes()
+  }, [currentPage])
+
+  // ✅ Fix: Pass page parameter
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setCurrentPage(1)
-    fetchPackages()
+    fetchPackages(1)
   }
 
   const filteredPackages = packages.filter(pkg =>
@@ -122,7 +126,7 @@ export default function AdminPackagesPage() {
         toast.success("Package created successfully")
       }
       handleCloseModal()
-      fetchPackages()
+      fetchPackages(currentPage) // ✅ Refresh current page
     } catch (error) {
       console.error("Failed to save package:", error)
       toast.error("Failed to save package")
@@ -138,7 +142,7 @@ export default function AdminPackagesPage() {
     try {
       await adminService.deletePackage(id)
       toast.success("Package deleted successfully")
-      fetchPackages()
+      fetchPackages(currentPage) // ✅ Refresh current page
     } catch (error) {
       console.error("Failed to delete package:", error)
       toast.error("Failed to delete package")
@@ -165,7 +169,6 @@ export default function AdminPackagesPage() {
       currency: "KES"
     }).format(amount)
   }
-
   return (
     <Layout>
       <section className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 py-12">
@@ -214,9 +217,13 @@ export default function AdminPackagesPage() {
                 <Button type="submit" variant="secondary">
                   <Search className="h-4 w-4" />
                 </Button>
-                <Button type="button" variant="outline" onClick={fetchPackages}>
-                  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                </Button>
+               <Button 
+  type="button" 
+  variant="outline" 
+  onClick={() => fetchPackages(currentPage)}  // ✅ Pass currentPage
+>
+  <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+</Button>
               </form>
             </div>
           </CardHeader>

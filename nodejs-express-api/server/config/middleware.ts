@@ -50,12 +50,12 @@ export const createMiddleware = (app: Express) => {
   // Compression
   app.use(compression({ threshold: 0 }));
 
-  // Cookie parser
+  // Cookie parser (required for reading JWT and CSRF cookies)
   app.use(cookieParser());
 
-  // CORS
+  // CORS - must come before credentials
   app.use(cors({
-     origin: function(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    origin: function(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
       // In development, allow undefined origin (Postman, curl) and local origins
       if (process.env.NODE_ENV !== 'production') {
         const devOrigins = [
@@ -69,18 +69,21 @@ export const createMiddleware = (app: Express) => {
         }
       }
 
-      // Production: check against APP_FRONTEND_URL
+      // Production: check against APP_FRONTEND_URL and APP_URL
       const frontendUrl = process.env.APP_FRONTEND_URL;
+      const appUrl = process.env.APP_URL;
       if (!frontendUrl) {
         logger.error('APP_FRONTEND_URL not set in production');
         return callback(new Error('CORS configuration error'));
       }
 
-      // Generate allowed origins from the frontend URL
+      // Generate allowed origins from the frontend URL and backend URL
       const allowedOrigins = [
         frontendUrl,
         frontendUrl.replace('https://', 'http://'),
         frontendUrl.replace('http://', 'https://'),
+        appUrl,
+        ...(appUrl ? [appUrl.replace('https://', 'http://'), appUrl.replace('http://', 'https://')] : []),
       ];
 
       // Handle www variations
@@ -102,7 +105,7 @@ export const createMiddleware = (app: Express) => {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true
+    credentials: true  // Required for cookies
   }));
 
   // Helmet security headers
@@ -110,7 +113,7 @@ export const createMiddleware = (app: Express) => {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
         fontSrc: ["'self'", "data:"],
@@ -120,9 +123,11 @@ export const createMiddleware = (app: Express) => {
       maxAge: 31536000,
       includeSubDomains: true,
     },
+    frameguard: { action: 'deny' },
   }));
 
-  // Rate limiting
+  // Rate limiting - trust proxy for production (handles X-Forwarded-For)
+  // When trust proxy is enabled, we should validate X-Forwarded-For
   const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,

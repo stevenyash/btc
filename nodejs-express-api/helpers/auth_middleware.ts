@@ -23,6 +23,7 @@ import passportLogin from './passport-auth.js';
     'invites', 'invites/index',
     'hls/manifest', 'hls/stream', // Public access for HLS endpoints (token-based auth)
     'migration', // Migration admin endpoints
+    'mpesa/push', 'mpesa/verify', 'mpesa/callback', 'mpesa/b2c_callback', // Payment endpoints - public for M-Pesa
   ];
 
 interface CustomRequest extends Request {
@@ -43,12 +44,25 @@ interface CustomRequest extends Request {
 
 export async function passportJwtLogin(req: Request, res: Response, next: NextFunction) {
   passportLogin();
+  
+  // Check if this is a public page to avoid unnecessary debug logs
+  const arrPath = req.path.split('/').filter(Boolean);
+  const page = arrPath[0];
+  const action = arrPath[1] || 'index';
+  const pagePath = `${page}/${action}`;
+  const isPublicPage = publicPages.includes(pagePath) || publicPages.includes(page);
+  
   passport.authenticate('jwt', { session: false }, async (err: Error | null, user: unknown, info: unknown) => {
     if (err) {
       console.error('[DEBUG] Passport auth error:', err);
       (req as any).user = undefined;
     } else if (!user) {
-      console.log('[DEBUG] Passport auth: No user found, info:', info);
+      // Only log debug info for non-public pages to avoid noise
+      if (!isPublicPage) {
+        console.log('[DEBUG] Passport auth: No user found, info:', info);
+        console.log('[DEBUG] JWT cookie present:', !!req.cookies?.jwt);
+        console.log('[DEBUG] Auth header present:', !!req.headers.authorization);
+      }
       (req as any).user = undefined;
     } else {
       console.log('[DEBUG] Passport auth: User authenticated, id:', (user as any)?.id, 'account_status:', (user as any)?.account_status);
@@ -85,25 +99,25 @@ export async function authMiddleware(req: CustomRequest, res: Response & { forbi
       req.hasPermission = (page: string, action: string) => rbac.hasPermission(page, action);
       req.userPages = rbac.userPages;
 
-      switch (roleName) {
-        case 'admin':
-          req.isAdmin = true;
-          break;
-        case 'subscriber':
-          req.isSubscriber = true;
-          break;
-        case 'marketer':
-          req.isMarketer = true;
-          break;
-        case 'teacher':
-          req.isTeacher = true;
-          break;
-        case 'superadmin':
-          req.isSuperadmin = true;
-          break;
-        default:
-          req.isGuest = true;
-      }
+       switch (roleName) {
+         case 'admin':
+           req.isAdmin = true;
+           break;
+         case 'subscriber':
+           req.isSubscriber = true;
+           break;
+         case 'marketer':
+           req.isMarketer = true;
+           break;
+         case 'teacher':
+           req.isTeacher = true;
+           break;
+         case 'superadmin':
+           req.isSuperadmin = true;
+           break;
+         default:
+           req.isGuest = true;
+       }
     }
 
     const arrPath = req.path.split('/').filter(Boolean);
@@ -113,8 +127,9 @@ export async function authMiddleware(req: CustomRequest, res: Response & { forbi
     console.log('[AUTH] page:', page, 'action:', action, 'pagePath:', pagePath);
 
     const isPublicPage = publicPages.includes(pagePath) || publicPages.includes(page);
+    console.log('[AUTH] isPublicPage:', isPublicPage, 'for path:', req.path);
 
-    if (isPublicPage || req.pageAccess === Rbac.AUTHORIZED || req.isSuperadmin) {
+    if (isPublicPage || req.pageAccess === Rbac.AUTHORIZED || req.isSuperadmin || req.isAdmin) {
       return next();
     } else if (req.pageAccess === Rbac.FORBIDDEN) {
       return res.forbidden();

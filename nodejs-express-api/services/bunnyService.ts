@@ -10,6 +10,11 @@ interface StreamVideo {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
   thumbnailUrl?: string;
+  description?: string;
+  collectionId?: string;
+  previewUrl?: string;
+  duration?: number;
+  encodeProgress?: number;
 }
 
 interface VideoMetadata {
@@ -19,15 +24,63 @@ interface VideoMetadata {
   [key: string]: unknown;
 }
 
+interface VideoMetadataStream {
+  guid: string;
+  title: string;
+  description?: string;
+  dateUploaded: string;
+  views: number;
+  length: number;
+  status: number;
+  thumbnailCount: number;
+  encodeProgress: number;
+  storageSize: number;
+  captions?: Array<{ srclang: string; label: string; url: string }>;
+}
+
+interface CaptionsOptions {
+  srclang: string;
+  label: string;
+  language: string;
+}
+
+interface VideoStatistics {
+  videoId: string;
+  views: Array<{ date: string; count: number }>;
+  watchTime: Array<{ date: string; seconds: number }>;
+  countries: Array<{ country: string; views: number }>;
+  totalViews: number;
+  totalWatchTime: number;
+}
+
+interface SecurityConfig {
+  defaultExpiry: number;
+  maxPlaysPerToken: number;
+  tokenCleanupInterval: number;
+}
+
+interface VideoTokenData {
+  videoId: string;
+  userId: string;
+  expiresAt: number;
+  maxPlays: number;
+  plays: number;
+  ip?: string;
+  userAgent?: string;
+  tokenId: string;
+  createdAt: string;
+  lastAccessed?: string;
+}
+
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
   process.env.BUNNY_STORAGE_ZONE || 'tutorconnect-videos-bunny',
   process.env.BUNNY_SECRET_KEY || ''
 );
 
-const apiKey = process.env.BUNNY_API_KEY || 'd14fe46f-d0f5-45c7-b90dd58bf1e0-d37b-4134';
-const libraryId = process.env.BUNNY_VIDEO_LIBRARY_ID || '644183';
-const streamBaseUrl = process.env.BUNNY_STREAM_BASE_URL || 'https://video.bunnycdn.com';
+const apiKey = process.env.BUNNY_API_KEY || '';
+const libraryId = process.env.BUNNY_VIDEO_LIBRARY_ID || '';
+const streamBaseUrl = (process.env.BUNNY_STREAM_BASE_URL || 'https://video.bunnycdn.com').replace(/\/$/, '');
 const pullZoneBaseUrl = (process.env.BUNNY_PULL_ZONE || 'https://vz-8217e52e-f0d.b-cdn.net').replace(/\/$/, '');
 
 function mapStatus(status: number): 'pending' | 'processing' | 'completed' | 'failed' {
@@ -207,6 +260,45 @@ export default {
     }
   },
 
+  // Upload video file to Bunny Stream Library (creates video entry + uploads file)
+  uploadToStream(filePath: string, options: { title?: string; description?: string } = {}): Promise<StreamVideo> {
+    const fileBuffer = fs.readFileSync(filePath);
+    
+    // Step 1: Create the video entry in the library
+    return makeStreamRequest<{ guid: string }>('POST', `/library/${libraryId}/videos`, {
+      title: options.title || 'Untitled Video',
+      description: options.description || '',
+    }).then((video) => {
+      const videoId = video.guid;
+      
+      // Step 2: Upload the video file using PUT to the video's upload URL
+      const uploadUrl = `${streamBaseUrl}/library/${libraryId}/videos/${videoId}`;
+      return fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'AccessKey': apiKey,
+        },
+        body: fileBuffer,
+      }).then(async (response) => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to upload video file: ${response.status} ${errorText}`);
+        }
+        return {
+          guid: videoId,
+          title: options.title || 'Untitled Video',
+          status: 'processing' as const,
+          videoUrl: getStreamUrl(videoId),
+          thumbnailUrl: getThumbnailUrl(videoId),
+        };
+      });
+    });
+  },
+
+  deleteFromStream(videoId: string) {
+    return makeStreamRequest('DELETE', `/library/${libraryId}/videos/${videoId}`).then(() => true).catch(() => false);
+  },
+
   deleteVideo(videoId?: string, storagePath?: string) {
     const p: Promise<any>[] = [];
     if (videoId) p.push(this.deleteFromStream(videoId));
@@ -214,11 +306,126 @@ export default {
     return Promise.all(p);
   },
 
-  deleteFromStream(videoId: string) {
-    return makeStreamRequest('DELETE', `/library/${libraryId}/videos/${videoId}`).then(() => true).catch(() => false);
-  },
-
   logAccess(log: any) {
     console.log('Access log:', log);
   },
+
+  // ==================== VIDEO DETAILS ====================
+  
+  async getVideo(videoId: string): Promise<StreamVideo> {
+    const video = await makeStreamRequest<any>('GET', `/library/${libraryId}/videos/${videoId}`);
+
+    return {
+      guid: video.guid,
+      title: video.title,
+      description: video.description,
+      status: mapStatus(video.status),
+      duration: video.length,
+      encodeProgress: video.encodeProgress,
+      videoUrl: getStreamUrl(video.guid),
+      thumbnailUrl: getThumbnailUrl(video.guid),
+    };
+  },
+
+  // Add captions to video
+  async addCaptions(
+    videoId: string,
+    options: CaptionsOptions,
+    captionFile: string
+  ): Promise<boolean> {
+    try {
+      const captionContent = fs.readFileSync(captionFile);
+      
+      const url = `${streamBaseUrl}/library/${libraryId}/videos/${videoId}/captions/${options.srclang}`;
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'AccessKey': apiKey,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: captionContent,
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Error adding captions:', error);
+      return false;
+    }
+  },
+
+  // Get video statistics
+  async getVideoStatistics(
+    videoId: string,
+    options?: {
+      dateFrom?: string;
+      dateTo?: string;
+      hourly?: boolean;
+    }
+  ): Promise<VideoStatistics> {
+    let endpoint = `/library/${libraryId}/videos/${videoId}/statistics`;
+    const params = new URLSearchParams();
+    
+    if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options?.dateTo) params.append('dateTo', options.dateTo);
+    if (options?.hourly !== undefined) params.append('hourly', String(options.hourly));
+    
+    const queryString = params.toString();
+    if (queryString) endpoint += `?${queryString}`;
+  
+    return await makeStreamRequest<VideoStatistics>('GET', endpoint);
+  },
+
+  // Transcribe video (if supported)
+  async transcribeVideo(videoId: string): Promise<boolean> {
+    try {
+      await makeStreamRequest<void>(
+        'POST',
+        `/library/${libraryId}/videos/${videoId}/transcribe`
+      );
+      return true;
+    } catch (error) {
+      console.error('Error transcribing video:', error);
+      return false;
+    }
+  },
+
+  // Set thumbnail
+  async setThumbnail(videoId: string, thumbnailFile: string): Promise<boolean> {
+    try {
+      const thumbnailContent = fs.readFileSync(thumbnailFile);
+      
+      const url = `${streamBaseUrl}/library/${libraryId}/videos/${videoId}/thumbnail`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'AccessKey': apiKey,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: thumbnailContent,
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Error setting thumbnail:', error);
+      return false;
+    }
+  },
+
+  // Get HLS manifest URL (for multi-resolution streaming)
+  getHlsManifestUrl(videoId: string): string {
+    return `${pullZoneBaseUrl}/${videoId}/playlist.m3u8`;
+  },
+
+  // Get MP4 URL
+  getMp4Url(videoId: string, resolution?: string): string {
+    const res = resolution ? `/${resolution}` : '';
+    return `${pullZoneBaseUrl}/${videoId}${res}.mp4`;
+  },
+
+  // Get video URL (auto-detects best format)
+  getVideoUrl(videoId: string): string {
+    return `${pullZoneBaseUrl}/${videoId}`;
+  }
 };

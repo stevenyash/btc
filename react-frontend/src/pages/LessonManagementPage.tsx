@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { 
   Video, 
   Plus, 
@@ -31,56 +31,55 @@ import { useNavigate } from "react-router-dom"
 export default function LessonManagementPage() {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
+   
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [grades, setGrades] = useState<{ id: number; name: string }[]>([])
   const [subjects, setSubjects] = useState<{ id: number; name: string }[]>([])
   const [strands, setStrands] = useState<{ id: number; name: string }[]>([])
-  
+    
   const [isLoading, setIsLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
-  
+    
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [filterGrade, setFilterGrade] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
-  
-  const [formData, setFormData] = useState<CreateLessonData & { s3_key?: string; file_size_mb?: number }>({
-    title: "",
-    description: "",
-    grade: "",
-    subject: "",
-    strand: "",
-    video_url: "",
-    s3_url: "",
-    s3_key: "",
-    thumbnail_url: "",
-    duration_minutes: undefined,
-    status: "active",
-    file_size_mb: undefined,
-  })
+    
+   const [formData, setFormData] = useState<CreateLessonData & { s3_key?: string; file_size_mb?: number }>({
+     title: "",
+     description: "",
+     grade: "", // deprecated, kept for compatibility
+     subject: "", // deprecated
+     strand: "", // deprecated
+     areaId: undefined,
+     topicId: undefined,
+     subtopicId: undefined,
+     video_url: "",
+     s3_url: "",
+     s3_key: "",
+     thumbnail_url: "",
+     duration_minutes: undefined,
+     status: "active",
+     file_size_mb: undefined,
+   })
 
-  useEffect(() => {
-    fetchLessons()
-    fetchOptions()
-  }, [currentPage, filterGrade, filterStatus])
+   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const fetchLessons = async () => {
-    setIsLoading(true)
+  const fetchLessons = useCallback(async (page: number, grade: string, status: string) => {
     try {
-      const response = await adminService.getLessons(currentPage, 20)
+      const response = await adminService.getLessons(page, 20)
       let filtered = response.data
       
-      if (filterGrade) {
-        filtered = filtered.filter(l => l.grade === filterGrade)
+      if (grade) {
+        filtered = filtered.filter(l => l.grade === grade)
       }
-      if (filterStatus) {
-        filtered = filtered.filter(l => l.status === filterStatus)
+      if (status) {
+        filtered = filtered.filter(l => l.status === status)
       }
       
       setLessons(filtered)
@@ -88,91 +87,104 @@ export default function LessonManagementPage() {
       setTotalPages(Math.ceil(response.total / 20))
     } catch (error) {
       console.error("Failed to fetch lessons:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const fetchOptions = async () => {
-    try {
-      const [gradesRes, subjectsRes, strandsRes] = await Promise.all([
-        adminService.getGrades(),
-        adminService.getSubjects(),
-        adminService.getStrands(),
-      ])
-      setGrades(gradesRes)
-      setSubjects(subjectsRes)
-      setStrands(strandsRes)
-    } catch (error) {
-      console.error("Failed to fetch options:", error)
-    }
-  }
+   useEffect(() => {
+     setIsLoading(true)
+     fetchLessons(currentPage, filterGrade, filterStatus).finally(() => setIsLoading(false))
+   }, [currentPage, filterGrade, filterStatus, fetchLessons])
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+   useEffect(() => {
+     const fetchOptions = async () => {
+       try {
+         const [gradesRes, subjectsRes, strandsRes] = await Promise.all([
+           adminService.getGrades(),
+           adminService.getSubjects(),
+           adminService.getStrands(),
+         ])
+         setGrades(gradesRes)
+         setSubjects(subjectsRes)
+         setStrands(strandsRes)
+       } catch (error) {
+         console.error("Failed to fetch options:", error)
+       }
+     }
+     fetchOptions()
+   }, [])
 
-    setIsLoading(true)
-    setUploadProgress(0)
-    try {
-      const result = await adminService.uploadDirectToS3(file, setUploadProgress)
-      setFormData(prev => ({
-        ...prev,
-        video_url: result.url,
-        s3_url: result.url,
-        s3_key: result.key,
-        file_size_mb: file.size / (1024 * 1024),
-      }))
-      setUploadProgress(100)
-    } catch (error) {
-      console.error("Failed to upload file:", error)
-      toast.error("Failed to upload file. Please try again or enter URL manually.")
-    } finally {
-      setIsLoading(false)
-      setTimeout(() => setUploadProgress(0), 2000)
-    }
-  }
+   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0];
+     if (file) {
+       setSelectedFile(file);
+     }
+   };
 
-  const handleCreateLesson = async () => {
-    if (!formData.title || !formData.grade || !formData.subject) {
-      toast.error("Please fill in required fields")
-      return
-    }
+   const handleCreateLesson = async () => {
+     if (!formData.title || !formData.areaId || !formData.topicId) {
+       toast.error("Please fill in required fields (title, grade, subject)")
+       return
+     }
+     if (!selectedFile) {
+       toast.error("Please select a video file to upload")
+       return
+     }
 
-    setIsLoading(true)
-    try {
-      const payload = {
-        ...formData,
-        s3_key: formData.s3_key,
-      }
-      await adminService.createLesson(payload)
-      closeModal()
-      fetchLessons()
-      toast.success("Lesson created successfully")
-    } catch (error) {
-      console.error("Failed to create lesson:", error)
-      toast.error("Failed to create lesson")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+     setIsLoading(true)
+     setUploadProgress(0)
+     try {
+       const fd = new FormData()
+       fd.append('title', formData.title)
+       fd.append('description', formData.description || '')
+       fd.append('area_id', formData.areaId.toString())
+       fd.append('topic_id', formData.topicId.toString())
+       if (formData.subtopicId) fd.append('subtopic_id', formData.subtopicId.toString())
+       fd.append('video', selectedFile)
+       // Optional defaults (backend handles)
+       fd.append('price', formData.price?.toString() || '0')
+       fd.append('is_preview_available', formData.is_preview_available ? 'true' : 'false')
+       fd.append('preview_duration', formData.preview_duration?.toString() || '0')
 
-  const handleUpdateLesson = async () => {
-    if (!editingLesson) return
+       await adminService.createLessonWithVideo(fd, setUploadProgress)
+       closeModal()
+       fetchLessons(currentPage, filterGrade, filterStatus)
+       toast.success("Lesson created successfully")
+     } catch (error) {
+       console.error("Failed to create lesson:", error)
+       toast.error("Failed to create lesson")
+     } finally {
+       setIsLoading(false)
+       setUploadProgress(0)
+     }
+   }
 
-    setIsLoading(true)
-    try {
-      await adminService.updateLesson(editingLesson.id, formData)
-      closeModal()
-      fetchLessons()
-      toast.success("Lesson updated successfully")
-    } catch (error) {
-      console.error("Failed to update lesson:", error)
-      toast.error("Failed to update lesson")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+   const handleUpdateLesson = async () => {
+     if (!editingLesson) return
+
+     setIsLoading(true)
+     try {
+       const payload = {
+         title: formData.title,
+         description: formData.description,
+         area_id: formData.areaId,
+         topic_id: formData.topicId,
+         subtopic_id: formData.subtopicId,
+         duration: formData.duration_minutes,
+         status: formData.status,
+         video_url: formData.video_url,
+         thumbnail_url: formData.thumbnail_url,
+       }
+       await adminService.updateLesson(editingLesson.id, payload)
+       closeModal()
+       fetchLessons(currentPage, filterGrade, filterStatus)
+       toast.success("Lesson updated successfully")
+     } catch (error) {
+       console.error("Failed to update lesson:", error)
+       toast.error("Failed to update lesson")
+     } finally {
+       setIsLoading(false)
+     }
+   }
 
   const handleDeleteLesson = async (id: number) => {
     if (!confirm("Are you sure you want to delete this lesson? This cannot be undone.")) return
@@ -180,7 +192,7 @@ export default function LessonManagementPage() {
     setIsLoading(true)
     try {
       await adminService.deleteLesson(id)
-      fetchLessons()
+      fetchLessons(currentPage, filterGrade, filterStatus)
       toast.success("Lesson deleted successfully")
     } catch (error) {
       console.error("Failed to delete lesson:", error)
@@ -190,59 +202,69 @@ export default function LessonManagementPage() {
     }
   }
 
-  const handleToggleStatus = async (lesson: Lesson) => {
-    setIsLoading(true)
-    try {
-      const result = await adminService.toggleLesson(lesson.id)
-      setLessons(prev => prev.map(l => 
-        l.id === lesson.id 
-          ? { ...l, is_active: result.is_active, status: result.status as 'active' | 'inactive' }
-          : l
-      ))
-    } catch (error) {
-      console.error("Failed to toggle lesson:", error)
-      fetchLessons()
-    } finally {
-      setIsLoading(false)
-    }
-  }
+   const handleToggleStatus = async (lesson: Lesson) => {
+     setIsLoading(true)
+     try {
+       const result = await adminService.toggleLesson(lesson.id)
+       setLessons(prev => prev.map(l => 
+         l.id === lesson.id 
+           ? { ...l, is_active: result.is_active, status: result.status as 'active' | 'inactive' }
+           : l
+       ))
+     } catch (error) {
+       console.error("Failed to toggle lesson:", error)
+       fetchLessons(currentPage, filterGrade, filterStatus)
+     } finally {
+       setIsLoading(false)
+     }
+   }
 
-  const openEditModal = (lesson: Lesson) => {
-    setEditingLesson(lesson)
-    setIsEditing(true)
-    setFormData({
-      title: lesson.title,
-      description: lesson.description,
-      grade: lesson.grade,
-      subject: lesson.subject,
-      strand: lesson.strand || "",
-      video_url: lesson.video_url || "",
-      s3_url: lesson.s3_url || "",
-      thumbnail_url: lesson.thumbnail_url || "",
-      duration_minutes: lesson.duration_minutes,
-      status: lesson.status,
-    })
-    setIsModalOpen(true)
-  }
+   const openEditModal = async (lesson: Lesson) => {
+     // Fetch full lesson details to get area/topic/subtopic IDs
+     const fullLesson = await adminService.getLesson(lesson.id);
+     setEditingLesson(fullLesson);
+     setIsEditing(true);
+     setFormData({
+       title: fullLesson.title,
+       description: fullLesson.description,
+       grade: fullLesson.grade || "",
+       subject: fullLesson.subject || "",
+       strand: fullLesson.strand || "",
+       areaId: fullLesson.area_id ?? undefined,
+       topicId: fullLesson.topic_id ?? undefined,
+       subtopicId: fullLesson.subtopic_id ?? undefined,
+       video_url: fullLesson.video_url || "",
+       s3_url: fullLesson.s3_url || "",
+       thumbnail_url: fullLesson.thumbnail_url || "",
+       duration_minutes: fullLesson.duration_minutes,
+       status: fullLesson.status,
+     });
+     setSelectedFile(null); // no file change for edit
+     setIsModalOpen(true);
+   };
 
-  const closeModal = () => {
-    setIsModalOpen(false)
-    setIsEditing(false)
-    setEditingLesson(null)
-    setFormData({
-      title: "",
-      description: "",
-      grade: "",
-      subject: "",
-      strand: "",
-      video_url: "",
-      s3_url: "",
-      thumbnail_url: "",
-      duration_minutes: undefined,
-      status: "active",
-    })
-    setUploadProgress(0)
-  }
+   const closeModal = () => {
+     setIsModalOpen(false)
+     setIsEditing(false)
+     setEditingLesson(null)
+     setFormData({
+       title: "",
+       description: "",
+       grade: "",
+       subject: "",
+       strand: "",
+       areaId: undefined,
+       topicId: undefined,
+       subtopicId: undefined,
+       video_url: "",
+       s3_url: "",
+       thumbnail_url: "",
+       duration_minutes: undefined,
+       status: "active",
+     })
+     setSelectedFile(null);
+     setUploadProgress(0)
+   }
 
   const filteredLessons = lessons.filter(l => 
     l.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -336,7 +358,14 @@ export default function LessonManagementPage() {
                 </select>
                 <Button 
                   variant="outline"
-                  onClick={fetchLessons}
+                  onClick={async () => {
+                    setIsLoading(true)
+                    try {
+                      await fetchLessons(currentPage, filterGrade, filterStatus)
+                    } finally {
+                      setIsLoading(false)
+                    }
+                  }}
                   disabled={isLoading}
                 >
                   <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -532,12 +561,12 @@ export default function LessonManagementPage() {
                   <select 
                     id="grade"
                     className="w-full px-3 py-2 border rounded-md bg-background"
-                    value={formData.grade}
-                    onChange={(e) => setFormData(prev => ({ ...prev, grade: e.target.value }))}
+                    value={formData.areaId || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, areaId: e.target.value ? Number(e.target.value) : undefined }))}
                   >
                     <option value="">Select Grade</option>
                     {grades.map(g => (
-                      <option key={g.id} value={g.name}>{g.name}</option>
+                      <option key={g.id} value={g.id}>{g.name}</option>
                     ))}
                   </select>
                 </div>
@@ -547,12 +576,12 @@ export default function LessonManagementPage() {
                   <select 
                     id="subject"
                     className="w-full px-3 py-2 border rounded-md bg-background"
-                    value={formData.subject}
-                    onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+                    value={formData.topicId || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, topicId: e.target.value ? Number(e.target.value) : undefined }))}
                   >
                     <option value="">Select Subject</option>
                     {subjects.map(s => (
-                      <option key={s.id} value={s.name}>{s.name}</option>
+                      <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
                 </div>
@@ -562,12 +591,12 @@ export default function LessonManagementPage() {
                   <select 
                     id="strand"
                     className="w-full px-3 py-2 border rounded-md bg-background"
-                    value={formData.strand || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, strand: e.target.value }))}
+                    value={formData.subtopicId || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, subtopicId: e.target.value ? Number(e.target.value) : undefined }))}
                   >
                     <option value="">Select Strand (Optional)</option>
                     {strands.map(s => (
-                      <option key={s.id} value={s.name}>{s.name}</option>
+                      <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
                 </div>
@@ -602,31 +631,31 @@ export default function LessonManagementPage() {
                   </select>
                 </div>
 
-              <div className="col-span-2">
-                <Label>Upload Video to Bunny.net</Label>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Bunny.net Stream
-                </div>
-                <div 
-                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <input 
-                    ref={fileInputRef}
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Click to upload or drag and drop
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    MP4, MOV, AVI up to 500MB
-                  </p>
-                </div>
-                  
+                 <div 
+                   className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                   onClick={() => fileInputRef.current?.click()}
+                 >
+                   <input 
+                     ref={fileInputRef}
+                     type="file"
+                     accept="video/*"
+                     className="hidden"
+                     onChange={handleFileSelect}
+                   />
+                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                   <p className="text-sm text-muted-foreground">
+                     Click to upload or drag and drop
+                   </p>
+                   <p className="text-xs text-muted-foreground mt-1">
+                     MP4, MOV, AVI up to 500MB
+                   </p>
+                   {selectedFile && (
+                     <p className="text-xs text-green-600 mt-2">
+                       Selected: {selectedFile.name}
+                     </p>
+                   )}
+                  </div>
+
                   {uploadProgress > 0 && uploadProgress < 100 && (
                     <div className="mt-3">
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -640,7 +669,6 @@ export default function LessonManagementPage() {
                       </p>
                     </div>
                   )}
-                </div>
 
                 <div className="col-span-2">
                   <Label htmlFor="video_url">Video URL (Bunny.net)</Label>

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useCallback, useEffect, useState } from "react"
 import { 
   Users, 
   RefreshCw, 
@@ -30,13 +31,13 @@ import { CanI } from "@/components/CanI"
 export default function AdminUsersPage() {
   const navigate = useNavigate()
   const [users, setUsers] = useState<User[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [filterRole, setFilterRole] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -50,14 +51,9 @@ export default function AdminUsersPage() {
   })
   const [isCreating, setIsCreating] = useState(false)
 
-  useEffect(() => {
-    fetchUsers()
-  }, [currentPage, filterRole, filterStatus])
-
-  const fetchUsers = async () => {
-    setIsLoading(true)
+  const fetchUsers = useCallback(async (page: number, role: string, status: string) => {
     try {
-      const response = await adminService.getUsers(currentPage, 20, filterRole || undefined, filterStatus || undefined)
+      const response = await adminService.getUsers(page, 20, role || undefined, status || undefined)
       const userData = response.data.map((u: any) => ({
         ...u,
         name: u.name || u.username || '',
@@ -69,10 +65,13 @@ export default function AdminUsersPage() {
     } catch (error) {
       console.error("Failed to fetch users:", error)
       toast.error("Failed to fetch users")
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    setIsLoading(true)
+    fetchUsers(currentPage, filterRole, filterStatus).finally(() => setIsLoading(false))
+  }, [currentPage, filterRole, filterStatus, fetchUsers])
 
   const handleToggleUserStatus = async (user: User) => {
     const newStatus = user.status === "active" ? "inactive" : "active"
@@ -80,7 +79,7 @@ export default function AdminUsersPage() {
     setIsLoading(true)
     try {
       await adminService.updateUser(user.id, { status: newStatus })
-      fetchUsers()
+      fetchUsers(currentPage, filterRole, filterStatus)
       toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`)
     } catch (error) {
       console.error("Failed to update user:", error)
@@ -96,7 +95,7 @@ export default function AdminUsersPage() {
     setIsLoading(true)
     try {
       await adminService.deleteUser(id)
-      fetchUsers()
+      fetchUsers(currentPage, filterRole, filterStatus)
       toast.success("User deleted successfully")
     } catch (error) {
       console.error("Failed to delete user:", error)
@@ -125,7 +124,7 @@ export default function AdminUsersPage() {
         role_id: 2,
         account_status: "active"
       })
-      fetchUsers()
+      fetchUsers(currentPage, filterRole, filterStatus)
     } catch (error) {
       console.error("Failed to create user:", error)
       toast.error("Failed to create user")
@@ -223,15 +222,22 @@ export default function AdminUsersPage() {
                     </Button>
                   )}
               </CanI>
-               <Button 
-                 variant="outline" 
-                 className="bg-white text-slate-800 hover:bg-slate-100"
-                 onClick={fetchUsers}
-                 disabled={isLoading}
-               >
-                 <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-                 Refresh
-               </Button>
+                <Button 
+                  variant="outline" 
+                  className="bg-white text-slate-800 hover:bg-slate-100"
+                  onClick={async () => {
+                    setIsLoading(true)
+                    try {
+                      await fetchUsers(currentPage, filterRole, filterStatus)
+                    } finally {
+                      setIsLoading(false)
+                    }
+                  }}
+                  disabled={isLoading}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
              </div>
           </div>
         </div>

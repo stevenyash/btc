@@ -9,27 +9,16 @@ import {
   Trash2,
   FileVideo
 } from "lucide-react"
+import { bunnyUploadService, type UploadFile as ServiceUploadFile, type UploadJob as ServiceUploadJob } from "../services/bunny-upload"
+import { adminService } from "../services/admin"
 
-interface UploadFile {
-  id: string
+interface UploadFile extends ServiceUploadFile {
   file: File
   name: string
-  size: number
-  type: string
   preview?: string
 }
 
-interface UploadJob {
-  id: string
-  filename: string
-  originalName: string
-  status: 'pending' | 'uploading' | 'processing' | 'completed' | 'failed'
-  progress: number
-  error?: string
-  bunnyVideoId?: string
-  startedAt: string
-  completedAt?: string
-}
+interface UploadJob extends ServiceUploadJob {}
 
 interface Lesson {
   id: number
@@ -54,15 +43,8 @@ export default function BunnyUploadAdminPage() {
 
   const fetchLessons = useCallback(async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/lessons?limit=1000`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-      const data = await response.json()
-      if (data.success) {
-        setLessons(data.data || [])
-      }
+      const response = await adminService.getLessons()
+      setLessons(response.data || [])
     } catch (error) {
       console.error('Error fetching lessons:', error)
     }
@@ -78,14 +60,9 @@ export default function BunnyUploadAdminPage() {
 
   const fetchJobs = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bunny-upload/jobs`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-      const data = await response.json()
-      if (data.success) {
-        setUploadJobs(data.jobs)
+      const response = await bunnyUploadService.getJobs()
+      if (response.success) {
+        setUploadJobs(response.jobs)
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
@@ -108,6 +85,9 @@ export default function BunnyUploadAdminPage() {
       name: file.name,
       size: file.size,
       type: file.type,
+      filename: file.name,
+      originalName: file.name,
+      mimetype: file.type,
     }))
 
     setFiles((prev) => [...prev, ...newFiles])
@@ -128,21 +108,8 @@ export default function BunnyUploadAdminPage() {
   const startUpload = async () => {
     if (files.length === 0) return
 
-    const formData = new FormData()
-    files.forEach((f) => {
-      formData.append('videos', f.file)
-    })
-
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bunny-upload/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: formData,
-      })
-
-      const data = await response.json()
+      const data = await bunnyUploadService.uploadVideos(files.map(f => f.file))
       if (!data.success) {
         throw new Error(data.error || 'Upload failed')
       }
@@ -161,14 +128,7 @@ export default function BunnyUploadAdminPage() {
 
   const processUpload = async (jobId: string) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bunny-upload/process/${jobId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-
-      const data = await response.json()
+      const data = await bunnyUploadService.processUpload(jobId)
       if (!data.success) {
         throw new Error(data.error || 'Processing failed')
       }
@@ -188,16 +148,7 @@ export default function BunnyUploadAdminPage() {
     if (pendingJobs.length === 0) return
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bunny-upload/process-batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({ jobIds: pendingJobs }),
-      })
-
-      const data = await response.json()
+      const data = await bunnyUploadService.processBatch(pendingJobs)
       alert(`Processed ${data.results.length} upload(s)`)
       fetchJobs()
     } catch (error: any) {
@@ -213,20 +164,11 @@ export default function BunnyUploadAdminPage() {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bunny-upload/create-lesson-from-upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          jobId,
-          title: lessonForm.title,
-          description: lessonForm.description,
-        }),
+      const data = await bunnyUploadService.createLessonFromUpload({
+        jobId,
+        title: lessonForm.title,
+        description: lessonForm.description,
       })
-
-      const data = await response.json()
       if (data.success) {
         alert('Lesson created successfully!')
         setShowCreateLesson(null)
@@ -250,19 +192,10 @@ export default function BunnyUploadAdminPage() {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/bunny-upload/attach-to-lesson`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          jobId,
-          lessonId: selectedLessonId,
-        }),
+      const data = await bunnyUploadService.attachToLesson({
+        jobId,
+        lessonId: selectedLessonId,
       })
-
-      const data = await response.json()
       if (data.success) {
         alert('Video attached to lesson!')
         setAttachToLesson(null)

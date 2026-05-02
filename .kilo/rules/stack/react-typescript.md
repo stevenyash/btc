@@ -170,8 +170,7 @@ export const useStoreName = create<StoreState>()(
         fetchData: async () => {
           set({ loading: true });
           try {
-            const response = await fetch('/api/data');
-            const data = await response.json();
+            const data = await apiService.get('/data');
             set({ data, loading: false });
           } catch (error) {
             set({ error: error.message, loading: false });
@@ -355,10 +354,10 @@ function useData<T>(
 }
 
 // Usage
-const { data: users, loading } = useData(
-  'users',
-  () => fetch('/api/users').then(r => r.json())
-);
+    const { data: users, loading } = useData(
+      'users',
+      () => apiService.get('/api/users')
+    );
 ```
 
 #### Reusable Form Hook
@@ -662,7 +661,7 @@ export function useUsers() {
   return useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const response = await fetch('/api/users');
+      const response = await apiService.get('/api/users');
       if (!response.ok) throw new Error('Failed to fetch');
       return response.json();
     },
@@ -675,11 +674,7 @@ export function useCreateUser() {
   
   return useMutation({
     mutationFn: async (user: CreateUserDto) => {
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        body: JSON.stringify(user),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const response = await apiService.post('/api/users', user);
       if (!response.ok) throw new Error('Failed to create');
       return response.json();
     },

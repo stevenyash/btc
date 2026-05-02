@@ -204,7 +204,10 @@ INSERT INTO `role_permissions` (`role_id`, `page`, `list`, `edit`, `remove`, `vi
     (3, 'subscribertracker', 1, 1, 1, 1, 1),
     (3, 'useractivity', 1, 1, 1, 1, 1),
     (3, 'referrallogs', 1, 1, 1, 1, 1),
-    (3, 'marketers/dashboard', 1, 1, 1, 1, 1)
+    (3, 'marketers/dashboard', 1, 1, 1, 1, 1),
+    (3, 'bunny-upload', 1, 1, 1, 1, 1),
+    (3, 'bunny-sync', 1, 1, 1, 1, 1),
+    (3, 'bunny-migrate', 1, 1, 1, 1, 1)
 ON DUPLICATE KEY UPDATE list = VALUES(list), edit = VALUES(edit), remove = VALUES(remove), view = VALUES(view), store = VALUES(store);
 
 -- For admin (role_id = 2) - Limited access (no delete, limited edit)
@@ -254,7 +257,10 @@ INSERT INTO `role_permissions` (`role_id`, `page`, `list`, `edit`, `remove`, `vi
     (2, 'subscribertracker', 1, 0, 0, 1, 0),
     (2, 'useractivity', 1, 0, 0, 1, 0),
     (2, 'referrallogs', 1, 0, 0, 1, 0),
-    (2, 'marketers/dashboard', 1, 0, 0, 1, 0)
+    (2, 'marketers/dashboard', 1, 0, 0, 1, 0),
+    (2, 'bunny-upload', 1, 1, 0, 1, 1),
+    (2, 'bunny-sync', 1, 0, 0, 1, 0),
+    (2, 'bunny-migrate', 1, 0, 0, 1, 0)
 ON DUPLICATE KEY UPDATE list = VALUES(list), edit = VALUES(edit), remove = VALUES(remove), view = VALUES(view), store = VALUES(store);
 
 -- For client (role_id = 1) - Read-only access
@@ -406,7 +412,10 @@ INSERT INTO `role_permissions` (`role_id`, `page`, `list`, `edit`, `remove`, `vi
     (5, 'purchases', 0, 0, 0, 0, 0),
     (5, 'subscribertracker', 0, 0, 0, 0, 0),
     (5, 'useractivity', 0, 0, 0, 0, 0),
-    (5, 'referrallogs', 0, 0, 0, 0, 0)
+    (5, 'referrallogs', 0, 0, 0, 0, 0),
+    (5, 'bunny-upload', 1, 1, 1, 1, 1),
+    (5, 'bunny-sync', 1, 0, 0, 1, 0),
+    (5, 'bunny-migrate', 1, 0, 0, 1, 0)
 ON DUPLICATE KEY UPDATE list = VALUES(list), edit = VALUES(edit), remove = VALUES(remove), view = VALUES(view), store = VALUES(store);
 
 -- ============================================

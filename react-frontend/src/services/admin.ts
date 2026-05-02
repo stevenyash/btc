@@ -104,31 +104,134 @@ export interface CreateMarketerData {
 }
 
 export interface Lesson {
-   id: number;
-   title: string;
-   description: string;
-   grade: string;
-   subject: string;
-   strand?: string;
-   video_url?: string;
-   video_key?: string;
-   s3_url?: string;
-   s3_key?: string;
-   storage_path?: string | null;
-   bunny_url?: string | null;
-   bunny_video_id?: string | null;
-   video_guid?: string | null;
-   transcoding_status?: 'pending' | 'processing' | 'completed' | 'failed';
-   mp4_urls?: string | null;
-   thumbnail_url?: string;
-   duration_minutes?: number;
-   file_size_mb?: number;
-   file_type: string;
-   is_active?: boolean;
-   status: 'active' | 'inactive';
-   created_at: string;
-   updated_at: string;
- }
+    id: number;
+    title: string;
+    description: string;
+    grade: string; // display name of area
+    subject: string; // display name of topic
+    strand?: string; // display name of subtopic
+    video_url?: string;
+    s3_url?: string;
+    storage_path?: string | null;
+    bunny_url?: string | null;
+    bunny_video_id?: string | null;
+    video_guid?: string | null;
+    transcoding_status?: 'pending' | 'processing' | 'completed' | 'failed';
+    mp4_urls?: string | null;
+    thumbnail_url?: string;
+    duration_minutes?: number;
+    file_size_mb?: number;
+    file_type: string;
+    is_active?: boolean;
+    status: 'active' | 'inactive';
+    created_at: string;
+    updated_at: string;
+    // Additional numeric IDs for hierarchy (not always present in list)
+    area_id?: number;
+    topic_id?: number;
+    subtopic_id?: number;
+  }
+
+export interface LearningLevel {
+    id: number;
+    name: string;
+    description: string;
+    sort_order: number;
+    is_active: boolean;
+}
+
+export interface Grade {
+    id: number;
+    name: string;
+    description: string;
+    level_id: number;
+    sort_order: number;
+    is_active: boolean;
+    learning_level_name?: string;
+}
+
+export interface LearningArea {
+    id: number;
+    name: string;
+    description: string;
+    grade_id: number;
+    color: string;
+    icon: string;
+    sort_order: number;
+    is_active: boolean;
+    grade_name?: string;
+}
+
+export interface Topic {
+    id: number;
+    name: string;
+    description: string;
+    area_id: number;
+    sort_order: number;
+    is_active: boolean;
+    learning_area_name?: string;
+}
+
+export interface Subtopic {
+    id: number;
+    name: string;
+    description: string;
+    topic_id: number;
+    sort_order: number;
+    is_active: boolean;
+    topic_name?: string;
+}
+
+export interface CommissionSettings {
+    default_commission_rate: number;
+    point_value: number;
+    min_withdrawal_amount: number;
+    min_points_redemption: number;
+}
+
+export interface MarketerCommission {
+    id: number;
+    marketer_id: number;
+    marketer_name: string;
+    marketer_phone: string;
+    user_id: number;
+    user_name: string;
+    transaction_id: number | null;
+    purchase_type: string;
+    purchase_amount: number;
+    commission_rate: number;
+    commission_amount: number;
+    status: string;
+    created_at: string;
+}
+
+export interface MarketerWithdrawal {
+    id: number;
+    marketer_id: number;
+    marketer_name: string;
+    marketer_phone: string;
+    amount: number;
+    phone_number: string;
+    source: string;
+    status: string;
+    mpesa_receipt: string | null;
+    remarks: string | null;
+    created_at: string;
+    processed_at: string | null;
+}
+
+export interface MarketerRedemption {
+    id: number;
+    marketer_id: number;
+    marketer_name: string;
+    marketer_phone: string;
+    points_redeemed: number;
+    point_value: number;
+    cash_amount: number;
+    status: string;
+    remarks: string | null;
+    created_at: string;
+}
 
 export interface Package {
   id: number;
@@ -165,25 +268,32 @@ export interface SubscriptionType {
 }
 
 export interface CreateLessonData {
-   title: string;
-   description: string;
-   grade: string;
-   subject: string;
-   strand?: string;
-   video_url?: string;
-   s3_url?: string;
-   s3_key?: string;
-   storage_path?: string | null;
-   bunny_url?: string | null;
-   bunny_video_id?: string | null;
-   video_guid?: string | null;
-   transcoding_status?: 'pending' | 'processing' | 'completed' | 'failed';
-   mp4_urls?: string | null;
-   thumbnail_url?: string;
-   duration_minutes?: number;
-   status?: 'active' | 'inactive';
-   is_active?: boolean;
- }
+    title: string;
+    description: string;
+    grade?: string; // DEPRECATED: use areaId
+    subject?: string; // DEPRECATED: use topicId
+    strand?: string; // DEPRECATED: use subtopicId
+    video_url?: string;
+    s3_url?: string;
+    s3_key?: string;
+    storage_path?: string | null;
+    bunny_url?: string | null;
+    bunny_video_id?: string | null;
+    video_guid?: string | null;
+    transcoding_status?: 'pending' | 'processing' | 'completed' | 'failed';
+    mp4_urls?: string | null;
+    thumbnail_url?: string;
+    duration_minutes?: number;
+    status?: 'active' | 'inactive';
+    is_active?: boolean;
+    // New numeric IDs for hierarchy
+    areaId?: number;
+    topicId?: number;
+    subtopicId?: number;
+    price?: number;
+    is_preview_available?: boolean;
+    preview_duration?: number;
+  }
 
 export interface CreateUserData {
   username: string;
@@ -218,21 +328,23 @@ export interface AdminService {
   getTransactions(page?: number, limit?: number): Promise<{ data: RecentTransaction[]; total: number }>;
   updateTransaction(id: number, data: Partial<RecentTransaction>): Promise<RecentTransaction>;
   deleteTransaction(id: number): Promise<void>;
-  getMarketers(page?: number, limit?: number): Promise<{ data: Marketer[]; total: number }>;
-  createMarketer(data: CreateMarketerData): Promise<Marketer>;
-  updateMarketer(id: number, data: Partial<Marketer>): Promise<Marketer>;
-  deleteMarketer(id: number): Promise<void>;
-  getAvailableUsersForMarketer(): Promise<RecentUser[]>;
+    getMarketers(page?: number, limit?: number): Promise<{ data: Marketer[]; total: number }>;
+    createMarketer(data: CreateMarketerData): Promise<Marketer>;
+    updateMarketer(id: number, data: Partial<Marketer>): Promise<Marketer>;
+    deleteMarketer(id: number): Promise<void>;
+    resendMarketerCredentials(id: number): Promise<void>;
+    getAvailableUsersForMarketer(): Promise<RecentUser[]>;
   getLessons(page?: number, limit?: number): Promise<{ data: Lesson[]; total: number }>;
   getLesson(id: number): Promise<Lesson>;
   createLesson(data: CreateLessonData): Promise<Lesson>;
   updateLesson(id: number, data: Partial<Lesson>): Promise<Lesson>;
   toggleLesson(id: number): Promise<{ id: number; is_active: boolean; status: string }>;
   deleteLesson(id: number): Promise<void>;
-  uploadLessonFile(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; key: string }>;
-  getPresignedUploadUrl(fileName: string, fileType: string): Promise<{ uploadUrl: string; fileUrl: string; key: string }>;
-  uploadDirectToS3(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; key: string }>;
-  getGrades(): Promise<{ id: number; name: string }[]>;
+    uploadLessonFile(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; key: string }>;
+    getPresignedUploadUrl(fileName: string, fileType: string): Promise<{ uploadUrl: string; fileUrl: string; key: string }>;
+    uploadDirectToS3(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; key: string }>;
+   createLessonWithVideo(formData: FormData, onProgress?: (progress: number) => void): Promise<Lesson>;
+   getGrades(): Promise<{ id: number; name: string }[]>;
   getSubjects(): Promise<{ id: number; name: string }[]>;
   getStrands(): Promise<{ id: number; name: string }[]>;
   getSubscriptionTypes(): Promise<{ id: number; name: string }[]>;
@@ -432,6 +544,10 @@ export const adminService: AdminService = {
     };
   },
 
+  async resendMarketerCredentials(id: number): Promise<void> {
+    await api.post(`/admin/marketers/${id}/resend-credentials`);
+  },
+
   async createMarketer(data: CreateMarketerData): Promise<Marketer> {
     const response = await api.post("/admin/marketers", data);
     return response.data;
@@ -573,22 +689,36 @@ export const adminService: AdminService = {
     return response.data;
   },
 
-   async uploadDirectToS3(file: File, _onProgress?: (progress: number) => void): Promise<{ url: string; key: string }> {
-     const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
-     const { uploadUrl, fileUrl, key } = await this.getPresignedUploadUrl(fileName, file.type);
-     
-     await fetch(uploadUrl, {
-       method: "PUT",
-       body: file,
-       headers: {
-         "Content-Type": file.type,
+    async uploadDirectToS3(file: File, _onProgress?: (progress: number) => void): Promise<{ url: string; key: string }> {
+      const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+      const { uploadUrl, fileUrl, key } = await this.getPresignedUploadUrl(fileName, file.type);
+
+      await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      return { url: fileUrl, key };
+    },
+
+   /**
+    * Create lesson with Bunny video upload in a single request.
+    */
+   async createLessonWithVideo(formData: FormData, onProgress?: (progress: number) => void): Promise<Lesson> {
+     const response = await api.post("/admin/admin_lessons/upload", formData, {
+       onUploadProgress: (e) => {
+         if (onProgress && e.total) {
+           onProgress(Math.round((e.loaded * 100) / e.total));
+         }
        },
      });
-     
-     return { url: fileUrl, key };
+     return response.data;
    },
 
-  async getGrades(): Promise<{ id: number; name: string }[]> {
+   async getGrades(): Promise<{ id: number; name: string }[]> {
     const response = await api.get("/admin/grades_option_list");
     return response.data || [];
   },

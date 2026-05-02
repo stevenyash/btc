@@ -5,7 +5,7 @@ const API_PUBLIC_URL = import.meta.env.VITE_API_URL+"/api" || "http://localhost:
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  withCredentials: true,  // Send cookies automatically
   headers: {
     "Content-Type": "application/json",
   },
@@ -13,29 +13,46 @@ const api = axios.create({
 
 const publicApi = axios.create({
   baseURL: API_PUBLIC_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  withCredentials: true, // Send cookies for cross-origin requests
 });
 
-export const tokenService = {
-  getToken: () => localStorage.getItem("token"),
-  setToken: (token: string) => localStorage.setItem("token", token),
-  removeToken: () => localStorage.removeItem("token"),
+// Cookie utility functions to read CSRF token
+export const cookieService = {
+  getCsrfToken: (): string | null => {
+    return document.cookie
+      .split('; ')
+      .find(row => row.startsWith('csrf_token='))
+      ?.split('=')[1] || null;
+  },
+  clearToken: () => {
+    // Not needed since server clears cookie on logout
+    // This is here for backward compatibility
+    console.log('Token cleared via server logout');
+  },
 };
 
+// Request interceptor - add CSRF token for state-changing methods
 api.interceptors.request.use((config) => {
-  const token = tokenService.getToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  // For state-changing methods, add CSRF token header
+  if (['post', 'put', 'patch', 'delete'].includes(config.method?.toLowerCase() || '')) {
+    const csrfToken = cookieService.getCsrfToken();
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
   }
   return config;
 });
 
 publicApi.interceptors.request.use((config) => {
-  const token = tokenService.getToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (['post', 'put', 'patch', 'delete'].includes(config.method?.toLowerCase() || '')) {
+    const csrfToken = cookieService.getCsrfToken();
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
+    // For FormData, don't set Content-Type to allow browser to set boundary
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
   }
   return config;
 });
@@ -49,15 +66,14 @@ publicApi.interceptors.response.use(
     if (!error.response) {
       console.error("Network error - no response:", error.message);
     } else if (status === 429) {
-      // Rate limit exceeded - add retry-after info to error
       const retryAfter = error.response?.headers?.['retry-after'];
       error.isRateLimit = true;
       error.retryAfter = retryAfter;
     } else if (status === 401) {
-      tokenService.removeToken();
+      // Token is in httpOnly cookie, no need to remove from localStorage
+      // Just redirect to login page
       window.location.href = "/login";
     } else if (status === 403) {
-      // Check if this is a lesson stream URL request - if so, don't redirect, let component handle it
       if (config?.url && config.url.includes('/lessons/stream-url/')) {
         return Promise.reject(error);
       }
@@ -79,16 +95,12 @@ api.interceptors.response.use(
     if (!error.response) {
       console.error("Network error - no response:", error.message);
     } else if (status === 429) {
-      // Rate limit exceeded - add retry-after info to error
       const retryAfter = error.response?.headers?.['retry-after'];
       error.isRateLimit = true;
       error.retryAfter = retryAfter;
-      // Don't retry automatically, let the component handle it with backoff
     } else if (status === 401) {
-      tokenService.removeToken();
       window.location.href = "/login";
     } else if (status === 403) {
-      // Check if this is a lesson stream URL request - if so, don't redirect, let component handle it
       if (config?.url && config.url.includes('/lessons/stream-url/')) {
         return Promise.reject(error);
       }
