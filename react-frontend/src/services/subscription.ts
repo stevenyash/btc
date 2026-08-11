@@ -69,6 +69,19 @@ export interface SubscriptionPlan {
   membership_fee: number;
 }
 
+export interface UpdateLessonBalanceRequest {
+  lessonId: number;
+  watchTimeSeconds: number;
+}
+
+export interface UpdateLessonBalanceResponse {
+  success: boolean;
+  previous_balance: number;
+  new_balance: number;
+  credits_deducted: number;
+  exhausted: boolean;
+}
+
 export interface SubscriptionService {
   getSubscriberDetails(): Promise<SubscriberDetails>;
   initiateMpesaPayment(data: MpesaPaymentRequest): Promise<MpesaPaymentResponse>;
@@ -76,6 +89,7 @@ export interface SubscriptionService {
   getPackages(): Promise<PackageDetails[]>;
   getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
   checkSubscription(): Promise<{ hasSubscription: boolean; data?: unknown }>;
+  updateLessonBalance(data: UpdateLessonBalanceRequest): Promise<UpdateLessonBalanceResponse>;
 }
 
 export const subscriptionService: SubscriptionService = {
@@ -136,6 +150,11 @@ export const subscriptionService: SubscriptionService = {
       console.error("Check subscription error:", err);
       return { hasSubscription: false, data: [] };
     }
+  },
+
+  async updateLessonBalance(data: UpdateLessonBalanceRequest): Promise<UpdateLessonBalanceResponse> {
+    const response = await api.post("/lessons/update-balance", data);
+    return response.data;
   },
 };
 

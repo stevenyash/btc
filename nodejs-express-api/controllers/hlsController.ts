@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import DB from '../models/db.js';
 import BunnyHelper from '../helpers/bunnyHelper.js';
+import bunnyConfig from '../config/bunny.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/manifest/:videoId', async (req: Request, res: Response) => {
 
     const hlsUrl = BunnyHelper.getSecureVideoUrl(videoId, {}, true).url;
     const mp4Url = BunnyHelper.getSecureVideoUrl(videoId, {}, false).url;
-    const thumbnailUrl = `https://vz-8217e52e-f0d.b-cdn.net/${videoId}/thumbnail/0`;
+    const thumbnailUrl = `${bunnyConfig.pullZoneBaseUrl}/${videoId}/thumbnail/0`;
 
     res.json({
       success: true,
@@ -101,7 +102,7 @@ router.get('/stream/:recid', async (req: Request, res: Response) => {
       video_id: videoId,
       video_url: videoUrl,
       hls_url: hlsUrl,
-      thumbnail_url: videoId ? `https://vz-8217e52e-f0d.b-cdn.net/${videoId}/thumbnail/0` : record.thumbnail_url,
+      thumbnail_url: videoId ? `${bunnyConfig.pullZoneBaseUrl}/${videoId}/thumbnail/0` : record.thumbnail_url,
       expiresAt: Date.now() + (expiresInNum * 1000),
     });
   } catch (error: any) {

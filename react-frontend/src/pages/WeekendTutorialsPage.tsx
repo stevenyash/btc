@@ -10,6 +10,7 @@ import { apiService } from "@/services/api"
 import Layout from "@/components/Layout"
 import { MpesaPaymentModule } from "@/components/MpesaPaymentModule"
 import { useAuthStore } from "@/stores/useAuthStore"
+import { getReferralCode } from "@/utils/referral"
 
 interface Level {
   value: number;
@@ -706,7 +707,8 @@ export default function WeekendTutorialsPage() {
                   tutorial_id: selectedTutorial.id,
                   learning_area: selectedTutorial.learning_area,
                   grade: selectedTutorial.grade,
-                  email
+                  email,
+                  referralCode: getReferralCode() || undefined,
                 }}
                 onSuccess={onPaymentSuccess}
                 onFailure={onPaymentFailure}

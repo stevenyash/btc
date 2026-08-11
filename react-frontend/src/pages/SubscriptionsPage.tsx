@@ -12,6 +12,7 @@
  import { MpesaPaymentModule } from "@/components/MpesaPaymentModule"
  import { useMpesaStore } from "@/stores/useMpesaStore"
  import { formatKenyanPhone } from "@/lib/utils"
+ import { captureReferralFromUrl, getReferralCode } from "@/utils/referral"
 
 const faqs = [
   {
@@ -47,16 +48,24 @@ const faqs = [
 
    const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
    const [showPayment, setShowPayment] = useState(false)
-   const [guestDetails, setGuestDetails] = useState<{ email: string; phone: string; name?: string }>({
-     email: "",
-     phone: "",
-     name: ""
-   })
-   const [guestFormStep, setGuestFormStep] = useState(false)
-
-   useEffect(() => {
-     fetchSubscriptionPlans()
-   }, [])
+    const [guestDetails, setGuestDetails] = useState<{ email: string; phone: string; name?: string; referralCode?: string }>({
+      email: "",
+      phone: "",
+      name: "",
+      referralCode: ""
+    })
+    const [guestFormStep, setGuestFormStep] = useState(false)
+    const [subscriptionReferralCode, setSubscriptionReferralCode] = useState<string | null>(null)
+ 
+    useEffect(() => {
+      const capturedReferralCode = captureReferralFromUrl() || getReferralCode()
+      setSubscriptionReferralCode(capturedReferralCode)
+      if (capturedReferralCode) {
+        setGuestDetails(prev => ({ ...prev, referralCode: capturedReferralCode }))
+      }
+      console.log('[Referral] Subscription initial referral code:', capturedReferralCode || 'none')
+      fetchSubscriptionPlans()
+    }, [])
 
     const handleSubscribe = (plan: Plan) => {
       setSelectedPlan(plan)
@@ -301,16 +310,30 @@ const faqs = [
                          required
                        />
                      </div>
-                     <div className="space-y-2">
-                       <Label htmlFor="guestName">Full Name (optional)</Label>
-                       <Input
+                      <div className="space-y-2">
+                        <Label htmlFor="guestName">Full Name (optional)</Label>
+                        <Input
                          id="guestName"
                          type="text"
                          placeholder="John Doe"
                          value={guestDetails.name}
-                         onChange={(e) => setGuestDetails(prev => ({ ...prev, name: e.target.value }))}
-                       />
-                     </div>
+                          onChange={(e) => setGuestDetails(prev => ({ ...prev, name: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="guestReferralCode">Referral Code (optional)</Label>
+                        <Input
+                          id="guestReferralCode"
+                          type="text"
+                          placeholder="Enter referral code if you have one"
+                          value={guestDetails.referralCode || ""}
+                          onChange={(e) => {
+                            const value = e.target.value.trim()
+                            setGuestDetails(prev => ({ ...prev, referralCode: value }))
+                            setSubscriptionReferralCode(value || null)
+                          }}
+                        />
+                      </div>
                    </CardContent>
                     <CardFooter className="flex gap-2">
                       <Button type="button" variant="outline" onClick={closePayment} className="flex-1">
@@ -327,13 +350,14 @@ const faqs = [
                   amount={selectedPlan.membership_fee}
                   accountReference={`SUBSCRIPTION_${selectedPlan.id}`}
                   defaultPhone={user?.phone || formatKenyanPhone(guestDetails.phone)}
-                  businessMetadata={{
+                   businessMetadata={{
                     activationType: 'subscription',
                     planId: selectedPlan.id,
                     planName: selectedPlan.name,
                     phoneNumber: user?.phone || formatKenyanPhone(guestDetails.phone),
                     email: user?.email || guestDetails.email,
-                    name: user?.username || guestDetails.name
+                    name: user?.username || guestDetails.name,
+                    referralCode: guestDetails.referralCode || subscriptionReferralCode || getReferralCode() || undefined,
                   }}
                   skipActivation={true}
                   readonlyPhone={!user}

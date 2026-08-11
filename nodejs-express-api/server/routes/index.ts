@@ -40,6 +40,8 @@ import HLSController from '../../controllers/hlsController.js';
 import BunnySyncController from '../../controllers/bunnySyncController.js';
 import BunnyUploadController from '../../controllers/bunnyUploadController.js';
 import BunnyMigrationController from '../../controllers/bunnyMigrationController.js';
+import BunnyController from '../../controllers/bunnyController.js';
+import B2HWebhookController from '../../controllers/b2hWebhookController.js';
 import { authLimiter } from '../config/middleware.js';
 
 export const setupRoutes = (app: Router) => {
@@ -115,8 +117,10 @@ export const setupRoutes = (app: Router) => {
   app.use("/api/servicessettings", ServicesSettingsController);
    app.use("/api/guesttracker", GuestTrackerController);
    app.use("/api/hls", HLSController);
-   app.use("/api/bunny-sync", BunnySyncController);
-   app.use("/api/bunny-upload", BunnyUploadController);
-   app.use("/api/bunny-migrate", BunnyMigrationController);
+    app.use("/api/bunny-sync", BunnySyncController);
+    app.use("/api/bunny-upload", BunnyUploadController);
+    app.use("/api/bunny-migrate", BunnyMigrationController);
+    app.use("/api/bunny", BunnyController);
+    app.use("/api/webhooks/b2h", B2HWebhookController);
  };
 

@@ -2,54 +2,34 @@ import './env.js';
 import app from './server/app.js';
 import { initializeDatabase, closeDatabase } from './server/config/database.js';
 import logger from './helpers/logger.js';
+import { b2hService } from './services/b2hIntegrationService.js';
+import http from 'http';
 
-const port = process.env.PORT || 8060;
+const PORT = process.env.PORT || 8060;
+
+const server = http.createServer(app);
 
 (async () => {
   try {
-    console.log("Starting app...");
     await initializeDatabase();
+    console.log('[B2H] Service ready:', b2hService.isConfigured());
 
-    const server = app.listen(port, () => {
-      logger.info(`Server is up and running on port: ${port}`);
-      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info('Learning Hierarchy API available at: /api/learning-hierarchy');
+    server.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
-
-    // Graceful shutdown handler
-    const shutdown = async (signal: string) => {
-      try {
-        logger.info(`${signal} received: closing HTTP server`);
-        server.close(async () => {
-          logger.info('HTTP server closed');
-          await closeDatabase();
-          logger.info('Database connections closed');
-          process.exit(0);
-        });
-      } catch (err) {
-        logger.error('Error during shutdown:', err);
-        process.exit(1);
-      }
-    };
-
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
-
-    // Catch unhandled promise rejections
-    process.on('unhandledRejection', (reason) => {
-      logger.error('Unhandled Rejection:', reason);
-    });
-
-    // Catch uncaught exceptions
-    process.on('uncaughtException', (err) => {
-      logger.error('Uncaught Exception:', err);
-      shutdown('UncaughtException');
-    });
-
   } catch (error) {
-    logger.error('Failed to start application:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 })();
 
-export default app;
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+  });
+  await closeDatabase();
+  process.exit(0);
+});

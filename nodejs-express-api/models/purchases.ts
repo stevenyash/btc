@@ -34,7 +34,7 @@ class Purchases extends BaseModel<PurchasesAttributes, PurchasesCreationAttribut
 				transaction_date: { type: DataTypes.DATE, defaultValue: sequelize.literal('DEFAULT') as any },
 				transaction_status: { type: 'ENUM' as const, values: [] },
 				payment_reference: { type: DataTypes.STRING },
-				amount_paid: { type: DataTypes.NUMBER },
+				amount_paid: { type: DataTypes.DECIMAL(10, 2) },
 				expiry_date: { type: DataTypes.DATE, defaultValue: sequelize.literal('DEFAULT') }
 			},
 			{

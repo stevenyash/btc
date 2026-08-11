@@ -20,7 +20,7 @@ class SubscriptionTypes extends BaseModel<SubscriptionTypesAttributes, Subscript
 				id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
 				name: { type: DataTypes.STRING, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				description: { type: DataTypes.STRING, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
-				membership_fee: { type: DataTypes.NUMBER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
+				membership_fee: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				created_at: { type: DataTypes.DATE, allowNull: false },
 				months: { type: DataTypes.STRING, allowNull: false }
 			},

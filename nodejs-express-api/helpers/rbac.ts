@@ -71,8 +71,12 @@ class Rbac {
 
   async getPageAccess(path: string): Promise<string> {
     path = path.replace(/^\/|\/$/g, '');
-    const arrPath = path.split("/");
-    const page = arrPath[0];
+    let arrPath = path.split("/");
+    // Remove 'api' prefix if present
+    if (arrPath[0] === 'api') {
+      arrPath = arrPath.slice(1);
+    }
+    const page = arrPath[0] || '';
 
     const excludePages = ['account', 'components_data', 'upload', 'services', ''];
     if (excludePages.includes(page)) {
@@ -98,7 +102,8 @@ class Rbac {
     };
 
     const normalizedAction = actionToPermission[action] || action;
-    const slashPath = arrPath.length > 1 ? path : `${page}/${action}`;
+    const remainingPath = arrPath.slice(1).join('/');
+    const slashPath = remainingPath ? `${page}/${remainingPath}` : `${page}/${action}`;
     const dotPath = slashPath.replace('/', '.');
 
     if (this.userRoleId) {

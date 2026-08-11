@@ -24,6 +24,7 @@ export interface VideoPlayerProps {
   onSeeked?: () => void;
   onRateChange?: (rate: number) => void;
   onError?: (error: unknown) => void;
+  onWatchTimeSync?: (watchTimeSeconds: number) => void;
 }
 
 export function VideoPlayer({
@@ -40,6 +41,7 @@ export function VideoPlayer({
   onSeeked,
   onRateChange,
   onError,
+  onWatchTimeSync,
 }: VideoPlayerProps) {
   console.log('[VideoPlayer] Mounted', {
     lessonId: lesson.id,
@@ -58,6 +60,9 @@ export function VideoPlayer({
    const lastUpdateRef = useRef<number>(0);
   const maxWatchTimeRef = useRef<number>(initialMaxWatchTime);
   const hasShownTimeUpMessageRef = useRef(false);
+  const accumulatedWatchTimeRef = useRef<number>(0);
+  const lastSyncTimeRef = useRef<number>(0);
+  const SYNC_INTERVAL_SECONDS = 30; // Sync every 30 seconds of watched time
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -103,9 +108,9 @@ export function VideoPlayer({
         return;
       }
 
-      // Skip enforcement for subscribers (they have unlimited or credit-based access)
-      if (isSubscriber) {
-        console.log('[VideoPlayer] Subscriber - skipping time enforcement');
+      // Enable time enforcement for all users when they have a finite watch time budget
+      if (initialMaxWatchTime <= 0 && maxWatchTimeRef.current <= 0) {
+        console.log('[VideoPlayer] No watch time budget, skipping time enforcement');
         return;
       }
 
@@ -163,17 +168,43 @@ export function VideoPlayer({
           const currentMaxTime = maxWatchTimeRef.current;
           const newTime = Math.max(0, currentMaxTime - deltaSeconds);
           setMaxWatchTime(newTime);
-          maxWatchTimeRef.current = newTime; // keep ref in sync immediately
+          maxWatchTimeRef.current = newTime;
+
+          accumulatedWatchTimeRef.current += deltaSeconds;
+
+          // Periodically sync watch time to parent (every SYNC_INTERVAL_SECONDS)
+          if (accumulatedWatchTimeRef.current - lastSyncTimeRef.current >= SYNC_INTERVAL_SECONDS) {
+            const secondsToSync = Math.floor(accumulatedWatchTimeRef.current - lastSyncTimeRef.current);
+            onWatchTimeSync?.(secondsToSync);
+            lastSyncTimeRef.current = accumulatedWatchTimeRef.current;
+            console.log('[VideoPlayer] Synced watch time:', secondsToSync, 'seconds');
+          }
+
           console.log('[VideoPlayer] Decremented time', { newTime });
         }
 
         // Check if time is up using ref (always current)
         if (maxWatchTimeRef.current <= 0 && !hasShownTimeUpMessageRef.current) {
           hasShownTimeUpMessageRef.current = true;
-          videoElement?.pause();
+          isTracking = false;
+
+          const videoToPause = videoElement || videoRef.current;
+          if (videoToPause) {
+            videoToPause.pause();
+          }
+
+          cleanup();
+
           console.log('[VideoPlayer] Time is up! Video paused');
           toast.info("Time's up! You've used all your watch time for this lesson.");
-          return; // stop animation loop
+
+          // Sync any remaining accumulated time before stopping
+          const remainingAccumulated = accumulatedWatchTimeRef.current - lastSyncTimeRef.current;
+          if (remainingAccumulated > 0) {
+            onWatchTimeSync?.(Math.floor(remainingAccumulated));
+          }
+
+          return;
         }
 
         animationFrameId = requestAnimationFrame(updateWatchTime);
@@ -230,12 +261,22 @@ export function VideoPlayer({
         if (videoElement && handlersAttached) {
           detachListeners(videoElement);
         }
+
+        // Sync any unsynced accumulated time before cleanup (prevents bypass by closing before 30s)
+        const unsyncedTime = accumulatedWatchTimeRef.current - lastSyncTimeRef.current;
+        if (unsyncedTime > 1) {
+          onWatchTimeSync?.(Math.floor(unsyncedTime));
+          console.log('[VideoPlayer] Synced unsynced time on cleanup:', Math.floor(unsyncedTime), 'seconds');
+        }
+
         // Reset for next video
         hasShownTimeUpMessageRef.current = false;
         lastUpdateRef.current = 0;
+        accumulatedWatchTimeRef.current = 0;
+        lastSyncTimeRef.current = 0;
         console.log('[VideoPlayer] Time enforcement cleanup');
       };
-    }, [isSubscriber, setMaxWatchTime, streamUrl]);
+    }, [isSubscriber, initialMaxWatchTime, setMaxWatchTime, streamUrl, onWatchTimeSync, cleanup]);
 
     // Attach ReactPlayer callback event listeners
     useEffect(() => {

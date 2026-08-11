@@ -9,6 +9,7 @@ import mailer from "../helpers/mailer.js";
 import utils from "../helpers/utils.js";
 import crypto from "crypto";
 import transactionStore from "../helpers/transactionStore.js";
+import { b2hService } from "../services/b2hIntegrationService.js";
 
 const MpesaController = express.Router();
 const op = DB.op || sequelizeOp || Op;
@@ -36,6 +37,15 @@ MpesaController.post("/push", async (req: Request, res: Response): Promise<void>
       });
       return;
     }
+
+    const normalizedBusinessMetadata = businessMetadata || {};
+    const referralCode = normalizedBusinessMetadata.referralCode as string | undefined;
+    console.log('[B2H] Initial STK referral capture:', {
+      accountReference,
+      activationType: normalizedBusinessMetadata.activationType,
+      hasReferralCode: !!referralCode,
+      referralCode: referralCode || null,
+    });
 
     const callbackUrl = process.env.MPESA_CALLBACK_URL;
 
@@ -65,7 +75,7 @@ MpesaController.post("/push", async (req: Request, res: Response): Promise<void>
         phoneNumber: cleanPhone,
         amount,
         accountReference,
-        businessMetadata,
+        businessMetadata: normalizedBusinessMetadata,
         status: "pending",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -575,7 +585,10 @@ export async function guestLessonActivation(
     console.log('[guestLessonActivation] Starting with record:', record);
     const lessonId = businessMetadata.lessonId as number;
     const userPhone = record.phoneNumber;
-    const expiresAt = new Date(Date.now() + 90 * 60 * 1000);
+    const durationMinutes = businessMetadata.duration
+      ? parseInt(businessMetadata.duration as string, 10)
+      : 90;
+    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
     console.log('[guestLessonActivation] lessonId:', lessonId, 'phone:', userPhone);
     
     const existingAccess = await DB.LessonAccessLogs.findOne({
@@ -594,12 +607,20 @@ export async function guestLessonActivation(
       return { success: true, message: "Lesson already activated", lessonId, accessType: "guest", canResume: true };
     }
     
-    console.log('[guestLessonActivation] Looking for user with phone:', userPhone);
-    const existingUser = await DB.Users.findOne({ where: { phone: userPhone } });
-    console.log('[guestLessonActivation] existingUser:', existingUser);
+    let existingUser = await DB.Users.findOne({ where: { phone: userPhone } });
     if (!existingUser) {
-      console.log('[guestLessonActivation] ERROR: User not found');
-      return { success: false, error: "User not found" };
+      const guestRole = await DB.Roles.findOne({ where: { role_name: 'Subscriber' } });
+      const guestRoleId = (guestRole as unknown as { role_id: number })?.role_id || 3;
+      const generatedUsercode = crypto.randomBytes(6).toString("hex").toUpperCase();
+      const guestUsername = `guest_${userPhone.slice(-6)}`;
+      existingUser = await DB.Users.create({
+        username: guestUsername,
+        phone: userPhone,
+        usercode: utils.usercodeHash(generatedUsercode),
+        user_role_id: guestRoleId,
+        account_status: 'Active',
+        status: 1,
+      }) as unknown as { id: number };
     }
     const userId = (existingUser as unknown as { id: number }).id;
     
@@ -717,6 +738,11 @@ export async function weekendTutorialActivation(
       await sendSms(userPhone, message);
     } catch (smsErr) {
       console.error("SMS failed:", smsErr);
+    }
+    const referralCode = businessMetadata.referralCode as string | undefined;
+    if (referralCode) {
+      b2hService.sendConversionWebhook(referralCode, 'TUTORIAL_REGISTRATION', record.amount)
+        .catch((err) => console.error('[B2H] Tutorial referral webhook failed:', err));
     }
     return { success: true, message: "Registered for weekend tutorial", tutorialId };
   } catch (err) {
@@ -905,6 +931,11 @@ export async function subscriptionActivation(
     } catch (txErr) {
       console.error('Failed to create transaction record:', txErr);
     }
+    const referralCode = businessMetadata.referralCode as string | undefined;
+    if (referralCode) {
+      b2hService.sendConversionWebhook(referralCode, 'SUBSCRIPTION_PURCHASE', record.amount)
+        .catch((err) => console.error('[B2H] Subscription referral webhook failed:', err));
+    }
     const smsMessage = isNewUser
       ? `Welcome to BTC! Your login credentials:\nUsername: ${generatedUsername}\nUsercode: ${generatedUsercode}\nPhone: ${userPhone}\nVisit https://bitstutorconnect.co.ke to login.`
       : `Your BTC subscription has been activated!\nPlan: ${(subscriptionPlan as unknown as { name: string }).name}\nExpires: ${expiryDate.toDateString()}`;
@@ -913,18 +944,28 @@ export async function subscriptionActivation(
     } catch (smsErr) {
       console.error("SMS sending failed:", smsErr);
     }
-    if (userEmail) {
-      const emailSubject = isNewUser ? "Welcome to BTC - Account Created" : "BTC Subscription Activated";
-      const emailBody = isNewUser
-        ? `<h2>Welcome to BTC!</h2><p>Your account has been created successfully.</p><p><strong>Username:</strong> ${generatedUsername}<br><strong>Usercode:</strong> ${generatedUsercode}</p><p>Login at: https://bitstutorconnect.co.ke</p>`
-        : `<h2>Subscription Activated</h2><p>Your BTC subscription has been activated.</p><p><strong>Plan:</strong> ${(subscriptionPlan as unknown as { name: string }).name}<br><strong>Expires:</strong> ${expiryDate.toDateString()}</p>`;
-      try {
-        await mailer.sendMail(userEmail, emailSubject, emailBody);
-      } catch (emailErr) {
-        console.error("Email sending failed:", emailErr);
-      }
-    }
-  } catch (error) {
+if (userEmail) {
+       const emailSubject = isNewUser ? "Welcome to BTC - Account Created" : "BTC Subscription Activated";
+       const emailBody = isNewUser
+         ? `<h2>Welcome to BTC!</h2><p>Your account has been created successfully.</p><p><strong>Username:</strong> ${generatedUsername}<br><strong>Usercode:</strong> ${generatedUsercode}</p><p>Login at: https://bitstutorconnect.co.ke</p>`
+         : `<h2>Subscription Activated</h2><p>Your BTC subscription has been activated.</p><p><strong>Plan:</strong> ${(subscriptionPlan as unknown as { name: string }).name}<br><strong>Expires:</strong> ${expiryDate.toDateString()}</p>`;
+       try {
+         await mailer.sendMail(userEmail, emailSubject, emailBody);
+       } catch (emailErr) {
+         console.error("Email sending failed:", emailErr);
+       }
+     }
+
+     return { 
+       success: true, 
+       message: "Subscription activated successfully",
+       planId: String(businessPlanId),
+       planName: (subscriptionPlan as unknown as { name: string }).name,
+       phoneNumber: userPhone,
+       expiryDate: expiryDate.toISOString(),
+       isNewUser
+     };
+   } catch (error) {
     console.error("Subscription activation error:", error);
     return { success: false, error: "Failed to activate subscription" };
   }
@@ -1138,6 +1179,12 @@ export async function packageActivation(
       );
     } catch (txErr) {
       console.error('Failed to create transaction record:', txErr);
+    }
+
+    const referralCode = businessMetadata.referralCode as string | undefined;
+    if (referralCode) {
+      b2hService.sendConversionWebhook(referralCode, 'PACKAGE_PURCHASE', record.amount)
+        .catch((err) => console.error('[B2H] Package referral webhook failed:', err));
     }
 
     // Send SMS

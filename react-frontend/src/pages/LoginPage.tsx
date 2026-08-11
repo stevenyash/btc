@@ -1,4 +1,5 @@
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"
+import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -15,10 +16,12 @@ import {
 } from "@/components/ui/card"
 import { Layout } from "@/components/Layout"
 import { useAuthStore } from "@/stores/useAuthStore"
+import { captureReferralFromUrl, getReferralCode, setReferralCode } from "@/utils/referral"
 
 const loginSchema = z.object({
   phone: z.string().min(1, "Phone / Email is required"),
   userCode: z.string().min(1, "User code is required"),
+  referralCode: z.string().optional(),
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
@@ -42,20 +45,34 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      referralCode: getReferralCode() || "",
+    },
   })
+
+  useEffect(() => {
+    const refCode = captureReferralFromUrl()
+    if (refCode) {
+      setValue("referralCode", refCode)
+    }
+  }, [setValue])
 
   const onSubmit = async (data: LoginFormData) => {
     clearError()
+    
+    if (data.referralCode) {
+      setReferralCode(data.referralCode)
+    }
     
     try {
       await login({ identifier: data.phone, code: data.userCode })
       const redirectTo = from !== "/dashboard" ? from : getRedirectPath()
       navigate(redirectTo, { replace: true })
     } catch (err: unknown) {
-      // Error is already in store
     }
   }
 
@@ -105,6 +122,18 @@ export default function LoginPage() {
                 />
                 {errors.userCode && (
                   <p className="text-sm text-red-500">{errors.userCode.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="referralCode">Referral Code (Optional)</Label>
+                <Input
+                  id="referralCode"
+                  type="text"
+                  placeholder="Enter referral code if you have one"
+                  {...register("referralCode")}
+                />
+                {errors.referralCode && (
+                  <p className="text-sm text-red-500">{errors.referralCode.message}</p>
                 )}
               </div>
             </CardContent>

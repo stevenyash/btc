@@ -9,5 +9,6 @@
     "icon-component"
   ],
   "frontendDir": "frontend-react",
-  "backendDir": "backend"
+  "backendDir": "backend",
+  "snapshot": false
 }

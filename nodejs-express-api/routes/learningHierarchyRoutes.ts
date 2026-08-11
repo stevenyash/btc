@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import learningHierarchyService from '../services/learningHierarchyService.js';
 import DB from '../models/db.js';
 import utils from '../helpers/utils.js';
+import bunnyConfig from '../config/bunny.js';
 
 const router = Router();
 
@@ -178,7 +179,7 @@ router.get('/filtered-lessons', async (req: Request, res: Response) => {
         price: data.price,
         is_preview_available: data.is_preview_available,
         bunny_video_id: data.bunny_video_id,
-        thumbnail_url: data.thumbnail_url,
+        thumbnail_url: data.thumbnail_url || (data.bunny_video_id ? `${bunnyConfig.pullZoneBaseUrl}/${data.bunny_video_id}/thumbnail/0` : null),
         area: data.learning_area?.name || 'N/A',
         area_id: data.learning_area?.id,
         topic: data.topic?.name || 'N/A',

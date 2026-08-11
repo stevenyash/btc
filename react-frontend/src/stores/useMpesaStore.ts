@@ -80,8 +80,6 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
           checkoutId,
         });
         console.log("Payment initiated, checkoutId:", checkoutId);
-        // Automatically start verification polling
-        setTimeout(() => get().verify(checkoutId), 0);
         return { success: true, checkoutId };
       }
 
@@ -103,57 +101,66 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
 
   verify: async (checkoutRequestID?: string) => {
     const { checkoutId: storedCheckoutId, pollInterval } = get();
-    
-    const checkoutId = checkoutRequestID || storedCheckoutId;
-    
-    if (!checkoutId) {
-      set({ status: "error", error: "No checkout ID" });
-      return null;
-    }
 
     if (pollInterval) {
       clearInterval(pollInterval);
-      set({ pollInterval: null });
+    }
+
+    const checkoutId = checkoutRequestID || storedCheckoutId;
+
+    if (!checkoutId) {
+      set({ status: "error", error: "No checkout ID", pollInterval: null });
       return null;
     }
 
     let attempts = 0;
+    let isCancelled = false;
 
     const checkStatus = async (): Promise<MpesaTransaction | null> => {
+      if (isCancelled) return null;
       try {
         console.log("Checking status for:", checkoutId);
         const response = await publicApi.get(`/mpesa/verify/${checkoutId}`);
         console.log("Status response:", response.data);
 
+        if (isCancelled) return null;
+
         if (response.data.error) {
+          isCancelled = true;
           set({
             status: "error",
             error: response.data.error,
+            pollInterval: null,
           });
           return null;
         }
 
-        if (response.data.status === "completed") {
+        if (response.data.status === "success" || response.data.status === "completed") {
+          isCancelled = true;
+          const tx = response.data.transaction || response.data;
           set({
             status: "success",
             transaction: {
               checkoutRequestID: checkoutId,
               status: "completed",
-              amount: response.data.amount,
-              phoneNumber: response.data.phoneNumber,
-              accountReference: response.data.accountReference,
-              businessMetadata: response.data.businessMetadata,
-              transactionID: response.data.transactionID,
+              amount: tx.amount,
+              phoneNumber: tx.phoneNumber,
+              accountReference: tx.accountReference,
+              businessMetadata: tx.businessMetadata,
+              transactionID: tx.transactionID,
             },
+            pollInterval: null,
           });
           return get().transaction;
         }
 
         if (response.data.status === "failed") {
           console.log("Payment failed, resultDesc:", response.data.resultDesc);
+          isCancelled = true;
           set({
             status: "error",
             error: response.data.resultDesc || "Payment was not completed. Please check your phone and try again.",
+            pollInterval: null,
           });
           return null;
         }
@@ -161,18 +168,22 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
         set({ status: "pending" });
         attempts++;
         if (attempts >= MAX_POLL_ATTEMPTS) {
+          isCancelled = true;
           set({
             status: "error",
             error: "Payment timeout. Please check your phone for the payment prompt.",
+            pollInterval: null,
           });
           return null;
         }
 
         return null;
       } catch (error) {
+        if (isCancelled) return null;
         attempts++;
         if (attempts >= MAX_POLL_ATTEMPTS) {
-          set({ status: "error", error: "Payment timeout. Please check your phone." });
+          isCancelled = true;
+          set({ status: "error", error: "Payment timeout. Please check your phone.", pollInterval: null });
           return null;
         }
         return null;
@@ -180,10 +191,15 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
     };
 
     const interval = setInterval(async () => {
+      if (isCancelled) {
+        clearInterval(interval);
+        return;
+      }
+
       const currentStatus = get().status;
-      
+
       if (currentStatus === "success" || currentStatus === "error") {
-        if (pollInterval) clearInterval(pollInterval);
+        clearInterval(interval);
         set({ pollInterval: null });
         return;
       }

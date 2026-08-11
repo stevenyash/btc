@@ -19,6 +19,7 @@ export interface LessonPurchaseModalProps {
     non_subscribed: { fee: number; duration: number };
   };
   onPurchaseComplete: () => void;
+  isExhausted?: boolean;
 }
 
 export function LessonPurchaseModal({
@@ -30,19 +31,29 @@ export function LessonPurchaseModal({
   userPhone,
   lessonFees,
   onPurchaseComplete,
+  isExhausted = false,
 }: LessonPurchaseModalProps) {
   const { checkAllPurchaseStatuses, lessons } = useGuestStore();
   const { reset: resetMpesa } = useMpesaStore();
 
   if (!open || !lesson) return null;
 
-  const amount = isSubscriber ? lessonFees.subscribed.fee : lessonFees.non_subscribed.fee;
-  const accountReference = `lesson_${lesson.id}_${isSubscriber ? "subscriber" : "guest"}`;
-  const defaultPhone = isSubscriber ? (userPhone || "") : (phone || "");
+  const amount = isExhausted
+    ? lessonFees.subscribed.fee
+    : isSubscriber
+      ? lessonFees.subscribed.fee
+      : lessonFees.non_subscribed.fee;
+  const accountReference = `lesson_${lesson.id}_${isExhausted ? "exhausted" : isSubscriber ? "subscriber" : "guest"}`;
+  const defaultPhone = isExhausted
+    ? userPhone || phone || ""
+    : isSubscriber
+      ? userPhone || ""
+      : phone || "";
   const businessMetadata = {
-    activationType: isSubscriber ? "subscribelessonactivation" : "guestlessonactivation",
+    activationType: isExhausted ? "guestlessonactivation" : isSubscriber ? "subscribelessonactivation" : "guestlessonactivation",
     lessonId: lesson.id,
     lessonFees: amount,
+    ...(isExhausted && { duration: lessonFees.subscribed.duration }),
   };
 
   const handlePaymentSuccess = async (transaction: {
@@ -51,42 +62,61 @@ export function LessonPurchaseModal({
     amount: number;
     phoneNumber: string;
   }) => {
-    if (!phone) return;
+    const phoneToUse = isExhausted ? (userPhone || phone) : phone;
+    if (!phoneToUse) return;
 
+    let purchaseRecorded = false;
     try {
-      await guestService.purchaseLesson(phone, lesson.id, {
+      await guestService.purchaseLesson(phoneToUse, lesson.id, {
         amount: transaction.amount,
         checkoutRequestID: transaction.checkoutRequestID,
         transactionID: transaction.transactionID,
+        ...(isExhausted && { duration: lessonFees.subscribed.duration }),
       });
+      purchaseRecorded = true;
+    } catch (error) {
+      console.error("Purchase record error:", error);
+    }
 
-      // Save to localStorage for offline/fast access (guest only)
-      if (!isSubscriber) {
-        const expiresAt = new Date(Date.now() + 90 * 60 * 1000).toISOString();
-        const payments = JSON.parse(localStorage.getItem("guest_lesson_payments") || "{}");
-        payments[`${phone}_${lesson.id}`] = {
-          phone,
-          lessonId: lesson.id,
-          checkoutRequestId: transaction.checkoutRequestID,
-          transactionStatus: "completed",
-          paidAt: new Date().toISOString(),
-          expiresAt,
-          watchTime: 0,
-        };
-        localStorage.setItem("guest_lesson_payments", JSON.stringify(payments));
-      }
+    if (!isSubscriber || isExhausted) {
+      const durationToUse = isExhausted ? lessonFees.subscribed.duration : lessonFees.non_subscribed.duration;
+      const expiresAt = new Date(Date.now() + durationToUse * 60 * 1000).toISOString();
+      const payments = JSON.parse(localStorage.getItem("guest_lesson_payments") || "{}");
+      payments[`${phoneToUse}_${lesson.id}`] = {
+        phone: phoneToUse,
+        lessonId: lesson.id,
+        checkoutRequestId: transaction.checkoutRequestID,
+        transactionStatus: "completed",
+        paidAt: new Date().toISOString(),
+        expiresAt,
+        watchTime: 0,
+      };
+      localStorage.setItem("guest_lesson_payments", JSON.stringify(payments));
+    }
 
-      resetMpesa();
-      onPurchaseComplete();
+    if (isExhausted) {
+      const statuses = new Map(useGuestStore.getState().purchaseStatuses);
+      statuses.set(lesson.id, {
+        lesson_id: lesson.id,
+        purchased: true,
+        max_watch_time: lessonFees.subscribed.duration * 60,
+      });
+      useGuestStore.setState({ purchaseStatuses: statuses });
+    }
 
-      // Refresh purchase statuses
+    resetMpesa();
+    onPurchaseComplete();
+
+    const phoneForCheck = isExhausted ? (userPhone || phone) : phone;
+    if (phoneForCheck) {
       const lessonIds = lessons.map((l) => l.id);
       if (lessonIds.length > 0) {
-        await checkAllPurchaseStatuses(phone, lessonIds);
+        await checkAllPurchaseStatuses(phoneForCheck, lessonIds);
       }
-    } catch (error) {
-      console.error("Purchase error:", error);
-      toast.error("Failed to complete purchase");
+    }
+
+    if (!purchaseRecorded) {
+      toast.error("Payment may not be fully synced. Contact support if access is denied.");
     }
   };
 
@@ -105,7 +135,7 @@ export function LessonPurchaseModal({
       <Card className="w-full max-w-md">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>{isSubscriber ? "Add More Lessons" : "Purchase Lesson"}</CardTitle>
+            <CardTitle>{isExhausted ? "Buy Lesson (Subscriber Rate)" : isSubscriber ? "Add More Lessons" : "Purchase Lesson"}</CardTitle>
             <Button variant="ghost" size="sm" onClick={handleClose}>
               <X className="h-4 w-4" />
             </Button>
@@ -115,13 +145,19 @@ export function LessonPurchaseModal({
         <CardContent className="space-y-4">
           <div className="bg-muted p-4 rounded-lg">
             <p className="text-sm"><strong>Lesson:</strong> {lesson.title}</p>
-            <p className="text-sm"><strong>Watch Time:</strong> {lessonFees.non_subscribed.duration} minutes</p>
-            {isSubscriber && (
-              <p className="text-sm"><strong>Credits:</strong> {lessonFees.subscribed.duration} min per credit</p>
+            <p className="text-sm"><strong>Watch Time:</strong> {lessonFees.subscribed.duration} minutes</p>
+            {isExhausted && (
+              <p className="text-sm text-orange-600"><strong>Note:</strong> Paying at subscriber rate since credits are exhausted.</p>
             )}
           </div>
 
-          {isSubscriber ? (
+          {isExhausted ? (
+            <div className="bg-orange-50 p-3 rounded text-sm text-orange-800">
+              <p className="font-semibold">Subscriber Rate</p>
+              <p className="text-2xl font-bold">KES {lessonFees.subscribed.fee}</p>
+              <p className="text-xs">{lessonFees.subscribed.duration} min watch time</p>
+            </div>
+          ) : isSubscriber ? (
             <>
               <div className="bg-green-50 p-3 rounded text-sm text-green-800">
                 <p className="font-semibold">Subscriber Rate</p>

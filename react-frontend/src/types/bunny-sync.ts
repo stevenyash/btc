@@ -111,6 +111,48 @@ export interface BunnySyncStats {
   noBunnyVideo: number;
 }
 
+export interface ReconciliationDetail {
+  videoId: string;
+  videoTitle: string;
+  collectionName: string;
+  lessonId?: number;
+  lessonTitle?: string;
+  status: 'linked' | 'skipped' | 'not_found' | 'error';
+  message: string;
+}
+
+export interface ReconciliationResult {
+  totalVideos: number;
+  linked: number;
+  skipped: number;
+  failed: number;
+  details: ReconciliationDetail[];
+}
+
+export interface CleanupDetail {
+  lessonId: number;
+  lessonTitle: string;
+  videoId: string;
+  action: 'cleaned' | 'skipped' | 'error';
+  message: string;
+}
+
+export interface CleanupResult {
+  totalChecked: number;
+  orphaned: number;
+  cleaned: number;
+  skipped: number;
+  errors: number;
+  details: CleanupDetail[];
+}
+
+export interface ReconciliationStats {
+  totalBunnyVideos: number;
+  mappedLessons: number;
+  unmappedVideos: number;
+  orphanedVideos: number;
+}
+
 export interface MappingSummary {
   total: number;
   mapped: number;

@@ -43,6 +43,7 @@ import UserPrivileges from './userprivileges.js';
 import Users from './users.js';
 import Videos from './videos.js';
 import TokenBlacklist from './token_blacklist.js';
+import B2HConversionLogs from './b2hConversionLogs.js';
 
 // Set up associations
 // Scheduler associations
@@ -263,6 +264,7 @@ const DB = {
 	ActiveSubscriptions,
 	AssignRights,
 	TokenBlacklist,
+	B2HConversionLogs,
 	ContactUs,
 	Grades,
 	GuestTracker,

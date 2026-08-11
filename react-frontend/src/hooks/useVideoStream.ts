@@ -104,6 +104,44 @@ export function useVideoStream({
       setSelectedQuality(-1);
 
       if (videoUrl.includes(".m3u8") && Hls.isSupported()) {
+        // Extract all token query params from the master manifest URL for sub-request auth.
+        // Bunny directory tokens include token_path (and potentially token_countries, etc.)
+        // — ALL of those must be forwarded on every sub-playlist and segment request.
+        const urlSearchParams = new URLSearchParams(videoUrl.split('?')?.[1] || '');
+        const tokenParamNames = [
+          'token',
+          'expires',
+          'token_path',
+          'token_countries',
+          'token_countries_blocked',
+          'token_ignore_params',
+          'limit',
+        ];
+
+        const hasTokenParams = tokenParamNames.some((p) => urlSearchParams.has(p));
+        const TokenLoader = hasTokenParams
+          ? class extends (Hls as any).DefaultConfig.loader {
+            load(context: any, config: any, callbacks: any) {
+              // Only append if the sub-request URL doesn't already carry a token
+              if (
+                context.url &&
+                !tokenParamNames.some((p) => context.url.includes(`${p}=`))
+              ) {
+                const sep = context.url.includes('?') ? '&' : '?';
+                const extra = tokenParamNames
+                  .map((p) => {
+                    const v = urlSearchParams.get(p);
+                    return v ? `${p}=${encodeURIComponent(v)}` : null;
+                  })
+                  .filter(Boolean)
+                  .join('&');
+                context.url = `${context.url}${sep}${extra}`;
+              }
+              super.load(context, config, callbacks);
+            }
+          }
+          : undefined;
+
         const hls = new Hls({
           enableWorker: false,
           lowLatencyMode: false,
@@ -112,6 +150,8 @@ export function useVideoStream({
           manifestLoadingTimeOut: 10000,
           levelLoadingTimeOut: 10000,
           autoStartLoad: true,
+          pLoader: TokenLoader as any,
+          fLoader: TokenLoader as any,
         });
 
         hls.loadSource(videoUrl);

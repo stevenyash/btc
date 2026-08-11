@@ -21,6 +21,7 @@ import { useAuthStore } from "@/stores/useAuthStore"
 import { useSubscriptionStore } from "@/stores/useSubscriptionStore"
 import { useMpesaStore } from "@/stores/useMpesaStore"
 import { formatKenyanPhone } from "@/lib/utils"
+import { getReferralCode } from "@/utils/referral"
 
 const paymentSchema = z.object({
   phone: z.string().min(10, "Please enter a valid Kenyan phone number"),
@@ -162,6 +163,7 @@ export default function PackageCheckoutPage() {
         activationType: isSubscribed ? 'package' : 'package_with_subscription',
         planId: selectedPackage.id.toString(),
         planName: selectedPackage.name,
+        referralCode: getReferralCode() || undefined,
         ...(!isSubscribed && data.email && { email: data.email })
       })
 

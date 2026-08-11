@@ -5,6 +5,8 @@ import { body } from 'express-validator';
 import utils from '../helpers/utils.js';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
+import bunnyConfig from '../config/bunny.js';
+import { guestLessonActivation } from './mpesa.js';
 
 const router = Router();
 
@@ -104,10 +106,10 @@ router.get('/lessons', async (req: Request, res: Response) => {
     // Transform lessons to include video URLs
     const transformedLessons = lessons.map((lesson: any) => {
       const lessonData = lesson.toJSON();
-      if (lessonData.bunny_video_id) {
-        lessonData.video_url = `https://vz-8217e52e-f0d.b-cdn.net/${lessonData.bunny_video_id}`;
-        lessonData.hls_url = `https://vz-8217e52e-f0d.b-cdn.net/${lessonData.bunny_video_id}/playlist.m3u8`;
-        lessonData.thumbnail_url = lessonData.thumbnail_url || `https://vz-8217e52e-f0d.b-cdn.net/${lessonData.bunny_video_id}/thumbnail.jpg`;
+       if (lessonData.bunny_video_id) {
+         lessonData.video_url = `${bunnyConfig.pullZoneBaseUrl}/${lessonData.bunny_video_id}`;
+         lessonData.hls_url = `${bunnyConfig.pullZoneBaseUrl}/${lessonData.bunny_video_id}/playlist.m3u8`;
+         lessonData.thumbnail_url = lessonData.thumbnail_url || `${bunnyConfig.pullZoneBaseUrl}/${lessonData.bunny_video_id}/thumbnail/0`;
       } else if (lessonData.bunny_url) {
         lessonData.video_url = lessonData.bunny_url;
       }
@@ -531,6 +533,44 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Error checking guest lessons status:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Purchase lesson for guest
+router.post('/guest_purchase_lesson', async (req: Request, res: Response) => {
+  try {
+    const { phone, lesson_id, amount, checkoutRequestID, transactionID, duration } = req.body;
+    const cleanPhone = String(phone).replace(/^0/, "254").replace(/\D/g, "");
+    const lessonId = Number(lesson_id);
+
+    if (!cleanPhone || cleanPhone.length !== 12 || !lessonId) {
+      return res.status(400).json({ error: 'Valid phone and lesson_id required' });
+    }
+
+    const result = await guestLessonActivation(
+      checkoutRequestID || `manual_${Date.now()}`,
+      {
+        lessonId,
+        activationType: 'guestlessonactivation',
+        ...(duration && { duration }),
+      },
+      {
+        phoneNumber: cleanPhone,
+        amount: Number(amount) || 0,
+        status: 'completed',
+        transactionID,
+        createdAt: new Date(),
+      }
+    );
+
+    if (result.success) {
+      return res.json(result);
+    } else {
+      return res.status(400).json(result);
+    }
+  } catch (err) {
+    console.error('Guest purchase lesson error:', err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 

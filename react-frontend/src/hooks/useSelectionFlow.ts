@@ -72,10 +72,12 @@ export function useSelectionFlow(options: UseSelectionFlowOptions = {}) {
     (level: LearningLevel) => {
       if (!level) return;
       setSelectedLevel(level);
-      searchParams.set("level", level.id.toString());
-      window.history.replaceState(null, "", `?${searchParams.toString()}`);
+      setSearchParams((params) => {
+        params.set("level", level.id.toString());
+        return params;
+      });
     },
-    [setSelectedLevel, searchParams]
+    [setSelectedLevel, setSearchParams]
   );
 
   const handleGradeSelect = useCallback(
@@ -100,7 +102,7 @@ export function useSelectionFlow(options: UseSelectionFlowOptions = {}) {
     setSelectedGrade(null);
     setSelectedArea(null);
     setSearchParams({});
-  }, [setSelectedLevel, setSelectedGrade, setSelectedArea]);
+  }, [setSearchParams, setSelectedLevel, setSelectedGrade, setSelectedArea]);
 
   const handleBackToGrades = useCallback(() => {
     setSelectedGrade(null);

@@ -3,6 +3,9 @@ import jwt from 'jsonwebtoken';
 import ejs from 'ejs';
 import { body } from 'express-validator';
 import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import utils from '../helpers/utils.js';
 import mailer from '../helpers/mailer.js';
 import validateFormData from '../helpers/validate_form.js';
@@ -11,6 +14,22 @@ import { authLimiter } from '../middleware/rateLimiters.js';
 import DB from '../models/db.js';
 import TokenBlacklist from '../models/token_blacklist.js';
 import { setAuthCookie, setCsrfCookie, clearAuthCookie } from '../helpers/cookieUtils.js';
+
+// Resolve views directory relative to this file's location
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const resolveViewsPath = (): string => {
+  const candidatePaths = [
+    process.env.VIEWS_PATH,
+    path.resolve(process.cwd(), 'nodejs-express-api/views'),
+    path.resolve(process.cwd(), 'views'),
+    path.resolve(__dirname, '../views'),
+    path.resolve(__dirname, '../../nodejs-express-api/views'),
+    path.resolve(__dirname, '../../views')
+  ].filter(Boolean) as string[];
+
+  return candidatePaths.find((candidatePath) => fs.existsSync(candidatePath)) || candidatePaths[0];
+};
+const viewsPath = resolveViewsPath();
 
 const router = Router();
 
@@ -380,26 +399,27 @@ router.post('/change-usercode', [
    }
 });
 
- async function sendusercodeResetLink(user: User): Promise<boolean> {
-   const token = generateUserToken(user);
+async function sendusercodeResetLink(user: User): Promise<boolean> {
+    const token = generateUserToken(user);
     const resetlink = `${process.env.APP_FRONTEND_URL || 'http://localhost:5173'}/index/resetusercode?token=${token}`;
-   const username = user.username;
-   const email = user.email;
-   const mailtitle = 'usercode Reset';
-   
-   const viewData = { 
-     username, 
-     email, 
-     resetlink,
-     config: {
-       app: {
-         name: process.env.APP_NAME || 'Bits Tutor Connect'
-       }
-     }
-   };
-   const mailbody = await ejs.renderFile("views/pages/index/usercode_reset_email_template.ejs", viewData);
+    const username = user.username;
+    const email = user.email;
+    const mailtitle = 'usercode Reset';
 
-  const mailResult: any = await mailer.sendMail(email, mailtitle, mailbody);
+    const viewData = {
+      username,
+      email,
+      resetlink,
+      config: {
+        app: {
+          name: process.env.APP_NAME || 'Bits Tutor Connect'
+        }
+      }
+    };
+    const templatePath = path.join(viewsPath, 'pages/index/usercode_reset_email_template.ejs');
+    const mailbody = await ejs.renderFile(templatePath, viewData);
+
+    const mailResult: any = await mailer.sendMail(email, mailtitle, mailbody);
 
   if (!mailResult.messageId) {
     throw new Error(mailResult.error);
@@ -424,7 +444,8 @@ async function sendUsercodeResetConfirmation(username: string, email: string, ne
     }
   };
 
-  const mailbody = await ejs.renderFile("views/pages/index/usercode_reset_confirmation_template.ejs", viewData);
+  const templatePath = path.join(viewsPath, 'pages/index/usercode_reset_confirmation_template.ejs');
+  const mailbody = await ejs.renderFile(templatePath, viewData);
   const mailResult: any = await mailer.sendMail(email, mailtitle, mailbody);
 
   if (!mailResult.messageId) {

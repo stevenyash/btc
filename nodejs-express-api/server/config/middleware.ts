@@ -61,12 +61,26 @@ export const createMiddleware = (app: Express) => {
         const devOrigins = [
           process.env.APP_FRONTEND_URL,
           'http://localhost:5173',
+          'http://localhost:5174',
+          'http://localhost:8050',
           'https://bitstutorconnect.co.ke'
         ].filter(Boolean) as string[];
 
         if (!origin || devOrigins.includes(origin)) {
           return callback(null, true);
         }
+      }
+
+      // Always allow localhost origins regardless of NODE_ENV
+      const localhostOrigins = [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:8050',
+        'http://localhost:8060',
+      ];
+      if (localhostOrigins.includes(origin)) {
+        return callback(null, true);
       }
 
       // Production: check against APP_FRONTEND_URL and APP_URL

@@ -3,7 +3,9 @@
  * Provides common patterns for URL generation, token handling, and error management
  */
 
+import crypto from 'crypto';
 import bunnyService from '../services/bunnyService.js';
+import bunnyConfig from '../config/bunny.js';
 
 // Type definitions
 interface TokenOptions {
@@ -21,15 +23,9 @@ interface SecureVideoUrlResult {
   expiresAt: number | null;
 }
 
-interface SecureStorageUrlResult {
-  url: string | null;
-  token: string | null;
-  expiresAt: number | null;
-}
-
 interface UploadOptions {
   title?: string;
-  useStream?: boolean;
+  description?: string;
   [key: string]: any;
 }
 
@@ -42,7 +38,6 @@ interface DeletionResult {
   success: boolean;
   data: {
     streamDeleted?: boolean;
-    storageDeleted?: boolean;
   };
   error?: string;
 }
@@ -60,6 +55,12 @@ interface ValidationResult {
   valid: boolean;
   issues: string[];
   warnings: string[];
+}
+
+interface SecureStorageUrlResult {
+  url: string | null;
+  token: string | null;
+  expiresAt: number | null;
 }
 
 export default class BunnyHelper {
@@ -96,44 +97,74 @@ export default class BunnyHelper {
       );
 
       try {
-        // Generate advanced token (query string format)
-        const tokenQuery = bunnyService.generateAdvancedToken(
-          isHls ? `/${videoId}/playlist.m3u8` : `/${videoId}`,
-          tokenOptions
-        );
-
-        // If token generation failed (returns null), log a clear warning and return unsecured URL
-        if (!tokenQuery) {
-          console.warn(`[BunnyHelper] Secure token generation failed for video ${videoId}. Falling back to unsecured URL. Check BUNNY_PULL_ZONE_SECURITY_KEY configuration.`);
-          const baseUrl = bunnyService.getStreamUrl(videoId);
-          return {
-            url: isHls ? `${baseUrl}/playlist.m3u8` : baseUrl,
-            hlsUrl: isHls ? `${baseUrl}/playlist.m3u8` : `${baseUrl}/playlist.m3u8`,
-            token: null,
-            expiresAt: null
-          };
-        }
-
-        const baseUrl = bunnyService.getStreamUrl(videoId);
-        const expiresAt = Date.now() + ((tokenOptions.expiresIn as number) * 1000);
-
         if (isHls) {
-          // For HLS, use path-based token to ensure variant playlists inherit the token
-          // Convert query token "token=...&expires=...&token_path=..." → path segment "bcdn_token=...&expires=...&token_path=..."
-          const tokenPathSegment = tokenQuery.replace(/^token=/, 'bcdn_token=');
+          // Use directory-scoped token for HLS (covers master playlist, sub-playlists, and segments)
+          const expiresIn = tokenOptions.expiresIn || 3600;
+          const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
 
-          // Build base (zone root), e.g., https://vz-xxxx.b-cdn.net
-          const baseOrigin = baseUrl.substring(0, baseUrl.lastIndexOf('/'));
+          if (!bunnyConfig.pullZoneSecurityKey) {
+            console.warn(`[BunnyHelper] No security key configured for HLS video ${videoId}. Falling back to unsecured URL.`);
+            const baseUrl = bunnyService.getStreamUrl(videoId);
+            return {
+              url: `${baseUrl}/playlist.m3u8`,
+              hlsUrl: `${baseUrl}/playlist.m3u8`,
+              token: null,
+              expiresAt: null
+            };
+          }
 
-          // Final URL: https://zone/bcdn_token=.../videoId/playlist.m3u8
-          const url = `${baseOrigin}/${tokenPathSegment}/${videoId}/playlist.m3u8`;
+          // Directory-scoped token: signed with /videoId/ and token_path parameter
+          const directoryPath = `/${videoId}/`;
+          const tokenQuery = bunnyService.generateAdvancedToken(directoryPath, {
+            expiresIn,
+            tokenPath: directoryPath,
+          });
+
+          if (!tokenQuery) {
+            console.warn(`[BunnyHelper] Token generation failed for HLS video ${videoId}. Falling back to unsecured URL.`);
+            const baseUrl = bunnyService.getStreamUrl(videoId);
+            return {
+              url: `${baseUrl}/playlist.m3u8`,
+              hlsUrl: `${baseUrl}/playlist.m3u8`,
+              token: null,
+              expiresAt: null
+            };
+          }
+
+          const baseUrl = bunnyService.getStreamUrl(videoId);
+          const url = `${baseUrl}/playlist.m3u8?${tokenQuery}`;
+
+          console.log(`[BunnyHelper] Generated HLS directory token URL for video ${videoId}: ${url.substring(0, 140)}...`);
+
+          const params = new URLSearchParams(tokenQuery);
           return {
             url,
             hlsUrl: url,
-            token: tokenPathSegment.split('&')[0].split('=')[1] || null, // just the token value
-            expiresAt
+            token: params.get('token') || '',
+            expiresAt: expiresAt * 1000
           };
         } else {
+          // Generate advanced token (query string format)
+          const tokenQuery = bunnyService.generateAdvancedToken(
+            `/${videoId}`,
+            tokenOptions
+          );
+
+          // If token generation failed (returns null), log a clear warning and return unsecured URL
+          if (!tokenQuery) {
+            console.warn(`[BunnyHelper] Secure token generation failed for video ${videoId}. Falling back to unsecured URL. Check BUNNY_PULL_ZONE_SECURITY_KEY configuration.`);
+            const baseUrl = bunnyService.getStreamUrl(videoId);
+            return {
+              url: baseUrl,
+              hlsUrl: `${baseUrl}/playlist.m3u8`,
+              token: null,
+              expiresAt: null
+            };
+          }
+
+          const baseUrl = bunnyService.getStreamUrl(videoId);
+          const expiresAt = Date.now() + ((tokenOptions.expiresIn as number) * 1000);
+
           // For non-HLS (MP4), use query-based token
           const separator = baseUrl.includes('?') ? '&' : '?';
           const url = `${baseUrl}${separator}${tokenQuery}`;
@@ -156,54 +187,52 @@ export default class BunnyHelper {
           token: null,
           expiresAt: null
         };
-     }
-   }
+      }
+    }
 
-   /**
-    * Generate secure storage URL with token
-    * @param storagePath - Bunny storage path
-    * @param options - Token options
-    * @returns Contains url and token info
-    */
+  /**
+   * Generate secure URL for storage-based videos (S3 or Bunny Storage)
+   * @param storagePath - Storage path (e.g., s3_key or storage_path from database)
+   * @param options - Token options
+   * @returns Contains url and token info
+   */
   static getSecureStorageUrl(
-    storagePath: string | null | undefined, 
+    storagePath: string | null | undefined,
     options: TokenOptions = {}
   ): SecureStorageUrlResult {
     if (!storagePath) {
       return { url: null, token: null, expiresAt: null };
     }
 
-    const tokenOptions: TokenOptions = {
-      expiresIn: options.expiresIn || 3600,
-      ...options
-    };
+    const expiresIn = options.expiresIn || 3600;
+    const expirationTime = Math.floor(Date.now() / 1000) + expiresIn;
 
-    try {
-      const token = bunnyService.generateAdvancedToken(
-        `/${storagePath}`,
-        tokenOptions
-      );
+    // For storage paths, we use the same token generation approach
+    // The storagePath is typically the file path in the pull zone
+    const tokenQuery = bunnyService.generateAdvancedToken(`/${storagePath}`, {
+      ...options,
+      tokenPath: `/${storagePath}`,
+    });
 
-      const baseUrl = bunnyService.getPublicUrl(storagePath);
-      const separator = baseUrl.includes('?') ? '&' : '?';
-      const tokenParam = token ? `${separator}${token}` : '';
-      
-      const url = token ? `${baseUrl}${tokenParam}` : baseUrl;
-
+    if (!tokenQuery) {
+      console.warn(`[BunnyHelper] Secure token generation failed for storage ${storagePath}. Falling back to unsecured URL.`);
       return {
-        url,
-        token,
-        expiresAt: Date.now() + ((tokenOptions.expiresIn as number) * 1000)
-      };
-    } catch (error) {
-      console.error('Error generating Bunny storage URL:', error);
-      // Fallback to unsecured URL
-      return {
-        url: bunnyService.getPublicUrl(storagePath),
+        url: `${bunnyConfig.pullZoneBaseUrl}/${storagePath}`,
         token: null,
         expiresAt: null
       };
     }
+
+    const baseUrl = `${bunnyConfig.pullZoneBaseUrl}/${storagePath}`;
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    const url = `${baseUrl}${separator}${tokenQuery}`;
+
+    const params = new URLSearchParams(tokenQuery);
+    return {
+      url,
+      token: params.get('token'),
+      expiresAt: Date.now() + (expiresIn * 1000)
+    };
   }
 
   /**
@@ -236,12 +265,12 @@ export default class BunnyHelper {
     }
   }
 
-  /**
-   * Handle video deletion (both Stream and Storage)
-   * @param videoId - Bunny video ID
-   * @param storagePath - Bunny storage path
-   * @returns Deletion result
-   */
+/**
+    * Handle video deletion (both Stream and Storage)
+    * @param videoId - Bunny video ID
+    * @param storagePath - Bunny storage path
+    * @returns Deletion result
+    */
   static async handleVideoDeletion(
     videoId: string | null = null, 
     storagePath: string | null = null
@@ -305,28 +334,28 @@ export default class BunnyHelper {
    */
   static validateConfig(): ValidationResult {
     const issues: string[] = [];
-    
-    if (!process.env.BUNNY_API_KEY) {
+    const warnings: string[] = [];
+
+    if (!bunnyConfig.apiKey) {
       issues.push('BUNNY_API_KEY is not configured');
     }
-    
-    if (!process.env.BUNNY_VIDEO_LIBRARY_ID) {
+
+    if (!bunnyConfig.libraryId) {
       issues.push('BUNNY_VIDEO_LIBRARY_ID is not configured');
     }
-    
-    if (!process.env.BUNNY_PULL_ZONE) {
-      issues.push('BUNNY_PULL_ZONE is not configured');
+
+    if (!bunnyConfig.pullZoneSecurityKey) {
+      warnings.push('BUNNY_PULL_ZONE_SECURITY_KEY is not set - secure video URLs will not work');
     }
-    
-    // Pull zone security key is optional but recommended for secure tokens
-    if (!process.env.BUNNY_PULL_ZONE_SECURITY_KEY) {
-      issues.push('WARNING: BUNNY_PULL_ZONE_SECURITY_KEY not configured - secure tokens will not work');
+
+    if (bunnyConfig.pullZoneBaseUrl === 'https://vz-8217e52e-f0d.b-cdn.net') {
+      warnings.push('Using default pull zone URL - consider setting BUNNY_PULL_ZONE_BASE_URL to your actual zone');
     }
-    
+
     return {
       valid: issues.length === 0,
       issues,
-      warnings: issues.filter(i => i.startsWith('WARNING:'))
+      warnings
     };
   }
 }

@@ -5,6 +5,7 @@ import passportLogin from './passport-auth.js';
 
   const publicPages = [
     'auth', 'auth/login', 'auth/csrf-token', 'auth/logout', 'auth/forgotusercode', 'auth/resetusercode',
+    'bunny/thumbnail', 'bunny/thumbnail/index',
     'components_data', 'home',
     'services', 'products', 'subscribe', 'viewlessons', 'guide', 'customlogin',
     'subscriptionshow', 'buypackages', 'guestlessons', 'guestclass', 'guestwatching',
@@ -23,7 +24,7 @@ import passportLogin from './passport-auth.js';
     'invites', 'invites/index',
     'hls/manifest', 'hls/stream', // Public access for HLS endpoints (token-based auth)
     'migration', // Migration admin endpoints
-    'mpesa/push', 'mpesa/verify', 'mpesa/callback', 'mpesa/b2c_callback', // Payment endpoints - public for M-Pesa
+    'mpesa/push', 'mpesa/verify', 'mpesa/callback', 'mpesa/b2c_callback', 'mpesa/manualactivate', // Payment endpoints - public for M-Pesa
   ];
 
 interface CustomRequest extends Request {
@@ -47,8 +48,10 @@ export async function passportJwtLogin(req: Request, res: Response, next: NextFu
   
   // Check if this is a public page to avoid unnecessary debug logs
   const arrPath = req.path.split('/').filter(Boolean);
-  const page = arrPath[0];
-  const action = arrPath[1] || 'index';
+  // Remove 'api' from the beginning if present
+  const pathParts = arrPath[0] === 'api' ? arrPath.slice(1) : arrPath;
+  const page = pathParts[0] || '';
+  const action = pathParts[1] || 'index';
   const pagePath = `${page}/${action}`;
   const isPublicPage = publicPages.includes(pagePath) || publicPages.includes(page);
   
@@ -117,12 +120,15 @@ export async function authMiddleware(req: CustomRequest, res: Response & { forbi
            break;
          default:
            req.isGuest = true;
-       }
+        }
     }
 
+    // Extract page/action from path, skipping the 'api' prefix
     const arrPath = req.path.split('/').filter(Boolean);
-    const page = arrPath[0];
-    const action = arrPath[1] || 'index';
+    // Remove 'api' from the beginning if present
+    const pathParts = arrPath[0] === 'api' ? arrPath.slice(1) : arrPath;
+    const page = pathParts[0] || '';
+    const action = pathParts[1] || 'index';
     const pagePath = `${page}/${action}`;
     console.log('[AUTH] page:', page, 'action:', action, 'pagePath:', pagePath);
 
@@ -142,3 +148,5 @@ export async function authMiddleware(req: CustomRequest, res: Response & { forbi
     return res.serverError(err);
   }
 }
+
+

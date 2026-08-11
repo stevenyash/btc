@@ -31,7 +31,7 @@ class Packages extends BaseModel<PackagesAttributes, PackagesCreationAttributes>
 				no_of_lessons: { type: DataTypes.INTEGER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				duration_amount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				duration_unit: { type: DataTypes.STRING, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
-				fee: { type: DataTypes.NUMBER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') }
+				fee: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: sequelize.literal('DEFAULT') }
 			},
 			{
 				sequelize,

@@ -107,11 +107,36 @@ export const guestService = {
     return Array.isArray(data) ? data : [];
   },
 
-  async getLessonsByArea(areaId: number): Promise<Lesson[]> {
-    const response = await publicApi.get(`/components_data/lessons?area_id=${areaId}`);
-    const data = response.data?.data || response.data?.records || response.data || [];
-    return Array.isArray(data) ? data : [];
-  },
+async getLessonsByArea(areaId: number): Promise<Lesson[]> {
+     const response = await publicApi.get(`/components_data/lessons?area_id=${areaId}`);
+     const data = response.data?.data || response.data?.records || response.data || [];
+     const dataArray = Array.isArray(data) ? data : [];
+     console.log('[guestService] Raw API response lessons count:', dataArray.length);
+      const mapped = dataArray.map((item: any) => {
+        console.log('[guestService] Lesson item thumbnail_url:', item.thumbnail_url, 'bunny_video_id:', item.bunny_video_id, 'title:', item.title);
+        return {
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          thumbnail_url: item.thumbnail_url, // Will be signed in LessonCard
+          duration: item.duration,
+          duration_seconds: item.duration_seconds,
+          is_preview_available: item.is_preview_available,
+          bunny_url: item.bunny_url,
+          bunny_video_id: item.bunny_video_id,
+          price: item.price,
+          created_at: item.created_at,
+          video_url: item.video_url,
+          hls_url: item.hls_url,
+          area_id: item.area_id,
+          grade_id: item.grade_id,
+          topic_id: item.topic_id,
+          subtopic_id: item.subtopic_id,
+        };
+      });
+     console.log('[guestService] Mapped lessons count:', mapped.length);
+     return mapped;
+   },
 
   async checkPurchaseStatus(phone: string, lessonId: number): Promise<GuestPurchaseStatus> {
     const response = await publicApi.get(`/components_data/guest_lesson_status/${lessonId}`, {
@@ -132,6 +157,7 @@ export const guestService = {
     amount: number;
     checkoutRequestID: string;
     transactionID?: string;
+    duration?: number;
   }): Promise<{ success: boolean; message: string }> {
     const response = await publicApi.post("/components_data/guest_purchase_lesson", {
       phone,

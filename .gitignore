@@ -37,6 +37,14 @@ tmp/
 uploads/
 *.bak
 *.backup
+*.err
+
+# Recon & test output
+recon-*.txt
+recon-output.txt
+recon-test.txt
+test-webhook*.ps1
+test-webhook*.ts
 
 # Database
 *.db

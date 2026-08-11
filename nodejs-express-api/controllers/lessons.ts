@@ -58,6 +58,79 @@ router.post('/log-access/:recid', async (req: Request, res: Response) => {
     }
   });
 
+// Update subscriber lesson balance (decrement based on watch time)
+router.post('/update-balance', async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const { lessonId, watchTimeSeconds } = req.body;
+
+      if (!lessonId || watchTimeSeconds === undefined || watchTimeSeconds <= 0) {
+        return res.status(400).json({ error: 'lessonId and positive watchTimeSeconds are required' });
+      }
+
+      // Get lesson duration from settings to convert watch time to credits
+      const lessonSetting = await DB.LessonSetting.findOne({
+        where: { subscription_type: 'subscribed' },
+        attributes: ['duration']
+      });
+
+      const durationPerCreditMinutes = lessonSetting ? Number(lessonSetting.duration) : 90;
+      const durationPerCreditSeconds = durationPerCreditMinutes * 60;
+
+      // Calculate credits to deduct (fractional based on actual watch time)
+      const creditsToDeduct = watchTimeSeconds / durationPerCreditSeconds;
+
+      // Get current lesson track
+      const lessonTrack = await DB.LessonTrack.findOne({
+        where: {
+          user_id: req.user.id,
+          status: 'active'
+        }
+      });
+
+      if (!lessonTrack || !lessonTrack.lesson_balance || lessonTrack.lesson_balance <= 0) {
+        return res.status(403).json({
+          error: 'No active subscription or lesson balance exhausted',
+          balance: 0,
+          exhausted: true
+        });
+      }
+
+      // Calculate new balance (minimum 0)
+      const currentBalance = lessonTrack.lesson_balance;
+      const newBalance = Math.max(0, currentBalance - creditsToDeduct);
+
+      // Update lesson track
+      await DB.LessonTrack.update(
+        {
+          lesson_balance: newBalance,
+          lessons_viewed: (lessonTrack.lessons_viewed || 0) + 1,
+          last_accessed: new Date(),
+          status: newBalance <= 0 ? 'exhausted' : 'active'
+        },
+        {
+          where: { id: lessonTrack.id }
+        }
+      );
+
+      console.log(`[Lesson Balance] User ${req.user.id} watched ${lessonId} for ${watchTimeSeconds}s, deducted ${creditsToDeduct.toFixed(4)} credits. Balance: ${currentBalance} -> ${newBalance.toFixed(4)}`);
+
+      return res.json({
+        success: true,
+        previous_balance: currentBalance,
+        new_balance: newBalance,
+        credits_deducted: creditsToDeduct,
+        exhausted: newBalance <= 0
+      });
+    } catch (error: any) {
+      console.error('Error updating lesson balance:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
 router.use(generalLimiter);
 
 async function beforeAdd(postdata: any, req: any) {

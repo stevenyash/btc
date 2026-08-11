@@ -111,22 +111,26 @@ export const useGuestStore = create<GuestState>()(
         }
       },
 
-      fetchLessons: async (areaId: number) => {
-        set({ isLoading: true, error: null });
-        try {
-          const lessons = await guestService.getLessonsByArea(areaId);
-          set({ lessons, isLoading: false });
-          
-          const phone = get().phone;
-          if (phone && lessons.length > 0) {
-            const lessonIds = lessons.map(l => l.id);
-            await get().checkAllPurchaseStatuses(phone, lessonIds);
-          }
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Failed to fetch lessons";
-          set({ error: message, isLoading: false });
-        }
-      },
+fetchLessons: async (areaId: number) => {
+         set({ isLoading: true, error: null });
+         try {
+           const lessons = await guestService.getLessonsByArea(areaId);
+           console.log('[useGuestStore] Fetched lessons:', lessons.length);
+           lessons.forEach((l, i) => {
+             console.log(`  [useGuestStore] Lesson[${i}] id=${l.id} title="${l.title}" thumbnail_url=${l.thumbnail_url} bunny_video_id=${l.bunny_video_id}`);
+           });
+           set({ lessons, isLoading: false });
+
+           const phone = get().phone;
+           if (phone && lessons.length > 0) {
+             const lessonIds = lessons.map(l => l.id);
+             await get().checkAllPurchaseStatuses(phone, lessonIds);
+           }
+         } catch (error: unknown) {
+           const message = error instanceof Error ? error.message : "Failed to fetch lessons";
+           set({ error: message, isLoading: false });
+         }
+       },
 
       checkPurchaseStatus: async (phone: string, lessonId: number) => {
         const status = await guestService.checkPurchaseStatus(phone, lessonId);

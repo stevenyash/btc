@@ -20,6 +20,13 @@
       "parentBranch": "main",
       "createdAt": "2026-05-01T03:59:25.400Z",
       "remote": "origin"
+    },
+    "wt-1779874647186-1": {
+      "branch": "notch-quasar",
+      "path": "d:\\nzuki2025\\btc\\.kilo\\worktrees\\notch-quasar",
+      "parentBranch": "main",
+      "createdAt": "2026-05-27T09:37:27.186Z",
+      "remote": "origin"
     }
   },
   "sessions": {
@@ -58,6 +65,10 @@
     "ses_2357eedb3ffeGcQ1yRXstuc8Ka": {
       "worktreeId": null,
       "createdAt": "2026-04-26T15:55:49.834Z"
+    },
+    "ses_19733d430ffey4ypv390sKj3vN": {
+      "worktreeId": "wt-1779874647186-1",
+      "createdAt": "2026-05-27T09:37:51.585Z"
     }
   },
   "tabOrder": {
@@ -68,6 +79,7 @@
   "worktreeOrder": [
     "wt-1777177753994-1",
     "wt-1777607929113-1",
-    "wt-1777607965400-2"
+    "wt-1777607965400-2",
+    "wt-1779874647186-1"
   ]
 }

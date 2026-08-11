@@ -100,27 +100,23 @@ async function migrateLesson(lesson: Lesson): Promise<void> {
     console.log(`  ⬆️  Uploading to Bunny Stream...`);
     const uploadResult = await bunnyService.uploadVideo(localPath, {
       title: lesson.title || `Lesson ${lesson.id}`,
-      useStream: true,
     });
 
     // Step 3: Update database
     const updateData: any = {
-      bunny_url: uploadResult.url,
+      bunny_url: uploadResult.videoUrl,
       transcoding_status: uploadResult.status || 'processing',
     };
 
-    if (uploadResult.videoId) {
-      updateData.bunny_video_id = uploadResult.videoId;
-    }
-    if (uploadResult.storagePath) {
-      updateData.storage_path = uploadResult.storagePath;
+    if (uploadResult.guid) {
+      updateData.bunny_video_id = uploadResult.guid;
     }
 
     await DB.Lessons.update(updateData, { where: { id: lesson.id } });
     
     console.log(`  ✅ Migrated successfully!`);
-    console.log(`     Video ID: ${uploadResult.videoId || 'N/A'}`);
-    console.log(`     URL: ${uploadResult.url}`);
+    console.log(`     Video ID: ${uploadResult.guid || 'N/A'}`);
+    console.log(`     URL: ${uploadResult.videoUrl}`);
     console.log(`     Status: ${uploadResult.status || 'processing'}`);
 
     // Clean up temp file

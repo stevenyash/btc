@@ -14,7 +14,6 @@
 		"@aws-sdk/client-sts": "^3.1034.0",
 		"@aws-sdk/cloudfront-signer": "^3.1034.0",
 		"@aws-sdk/s3-request-presigner": "^3.929.0",
-		"@bunny.net/storage-sdk": "^0.3.1",
 		"@google-apps/meet": "^0.6.0",
 		"@google-cloud/local-auth": "^3.0.1",
 		"axios": "^1.7.9",
@@ -22,6 +21,7 @@
 		"compression": "^1.7.4",
 		"cookie-parser": "^1.4.7",
 		"cors": "^2.8.5",
+		"csurf": "^1.11.0",
 		"daraja.js": "^1.0.6",
 		"dotenv": "^16.6.1",
 		"ejs": "^3.1.10",
@@ -53,6 +53,7 @@
 		"pusher-js": "^8.4.0-rc2",
 		"sequelize": "^6.6.5",
 		"sharp": "^0.33.5",
+		"tus": "^0.1.7",
 		"winston": "^3.19.0"
 	},
 	"devDependencies": {
