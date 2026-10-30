@@ -61,6 +61,7 @@ export default function PackagesPage() {
       duration: `${pkg.duration_amount} ${pkg.duration_unit}`,
       features: [
         `${pkg.no_of_lessons} lessons included`,
+        `${pkg.watch_time_minutes} total viewing minutes`,
         `Up to ${pkg.concurrent_access} concurrent users`,
         `Valid for ${pkg.duration_amount} ${pkg.duration_unit}`,
         "Access to video lessons",

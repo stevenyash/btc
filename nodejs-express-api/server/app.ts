@@ -6,6 +6,7 @@ import { setupRoutes } from './routes/index.js';
 import { initializeDatabase } from './config/database.js';
 import logger from '../helpers/logger.js';
 import { csrfProtection } from '../middleware/csrf.js';
+import B2HWebhookController from '../controllers/b2hWebhookController.js';
 
 const app: Express = express();
 
@@ -17,8 +18,10 @@ app.set('view engine', 'ejs');
 // Setup middleware
 createMiddleware(app);
 
+// External webhook auth is its HMAC signature; it does not use browser CSRF tokens.
+app.use('/api/webhooks/b2h', B2HWebhookController);
+
 // CSRF protection for state-changing operations
-// Applied BEFORE auth middleware to validate before processing
 app.use('/api', csrfProtection);
 
 // Auth middleware for all /api routes

@@ -23,11 +23,16 @@ export const createMiddleware = (app: Express) => {
   const requiredEnvVars = [
     'DB_HOST',
     'DB_NAME',
-    'DB_USERNAME',
-    'DB_PASSWORD',
   ];
 
   const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+  if (typeof process.env.DB_PASSWORD === 'undefined' ||
+      (process.env.NODE_ENV === 'production' && !process.env.DB_PASSWORD.trim())) {
+    missingEnvVars.push('DB_PASSWORD');
+  }
+  if (!process.env.DB_USERNAME && !process.env.DB_USER) {
+    missingEnvVars.push('DB_USERNAME (or DB_USER)');
+  }
   if (missingEnvVars.length > 0) {
     logger.error(`ERROR: Missing required environment variables: ${missingEnvVars.join(', ')}`);
     process.exit(1);
@@ -161,7 +166,14 @@ export const createMiddleware = (app: Express) => {
   }));
 
   // Body parsers
-  app.use(express.json());
+  app.use(express.json({
+    verify: (req, _res, buffer) => {
+      const requestPath = (req.url || '').split('?')[0].replace(/\/+$/, '');
+      if (requestPath === '/api/webhooks/b2h') {
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+      }
+    },
+  }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Custom middleware

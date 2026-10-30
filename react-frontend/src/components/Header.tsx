@@ -3,12 +3,13 @@ import { Link, useNavigate } from "react-router-dom"
 import { 
   Menu, X, User, LogOut, Settings, UserCircle, ChevronDown,
   Home, BookOpen, GraduationCap, Phone, FileText, Package, Calendar, LogIn,
-  DollarSign, UserCheck, BarChart3
+  DollarSign, UserCheck, BarChart3, Video
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/stores/useAuthStore"
 import { useRole } from "@/hooks/useRole"
+import { useUIStore } from "@/stores/useUIStore"
 
 interface MenuItem {
   label: string
@@ -37,6 +38,7 @@ export function Header({
   const userRole = propUserRole ?? user?.role ?? user?.role_name ?? ""
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const { mobileSidebarOpen, setMobileSidebarOpen } = useUIStore()
   const navigate = useNavigate()
 
 // Base menus (always visible - public)
@@ -77,6 +79,7 @@ export function Header({
     { label: "Withdrawals", path: "/admin/withdrawals", icon: DollarSign },
     { label: "Lessons", path: "/admin/lessons", permission: "lessons.list" },
     { label: "Learning Hierarchy", path: "/admin/learning-hierarchy" },
+    { label: "Bunny Video Sync", path: "/admin/bunny-sync", icon: Video },
   ]
 
  
@@ -107,9 +110,17 @@ export function Header({
           variant="ghost"
           size="icon"
           className="md:hidden"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onClick={() => {
+            if (isLoggedIn) {
+              setMobileSidebarOpen(!mobileSidebarOpen)
+            } else {
+              setMobileMenuOpen(!mobileMenuOpen)
+            }
+          }}
+          aria-label={isLoggedIn ? "Toggle navigation menu" : "Toggle main menu"}
+          aria-expanded={isLoggedIn ? mobileSidebarOpen : mobileMenuOpen}
         >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {(isLoggedIn ? mobileSidebarOpen : mobileMenuOpen) ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
 
         {/* App Name - Logo */}
@@ -117,13 +128,13 @@ export function Header({
           <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center">
             <GraduationCap className="h-5 w-5 text-white" />
           </div>
-          <span className="text-lg font-bold bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent hidden sm:inline">
+          <span className="max-w-[120px] truncate text-xs font-bold bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent sm:max-w-none sm:text-lg">
             {APP_NAME}
           </span>
         </Link>
 
         {/* Desktop Navigation - Icons Above Text */}
-        <nav className="hidden lg:flex items-center justify-center flex-1 px-4">
+        {!isLoggedIn && <nav className="hidden lg:flex items-center justify-center flex-1 px-4">
            <div className="flex items-center justify-center gap-1">
              {allMenus.map((item) => {
               const Icon = item.icon
@@ -139,10 +150,10 @@ export function Header({
               )
             })}
           </div>
-        </nav>
+        </nav>}
 
         {/* Tablet Navigation - Icons only */}
-        <nav className="hidden md:flex lg:hidden items-center justify-center flex-1 px-2">
+        {!isLoggedIn && <nav className="hidden md:flex lg:hidden items-center justify-center flex-1 px-2">
           <div className="flex items-center justify-center gap-0.5">
             {allMenus.map((item) => {
               const Icon = item.icon
@@ -151,13 +162,15 @@ export function Header({
                   key={item.path}
                   to={item.path}
                   className="flex flex-col items-center justify-center p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                  aria-label={item.label}
+                  title={item.label}
                 >
                   {Icon && <Icon className="h-5 w-5 text-primary" />}
                 </Link>
               )
             })}
           </div>
-        </nav>
+        </nav>}
 
         {/* Right Side - Auth */}
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -280,7 +293,7 @@ export function Header({
       </div>
 
       {/* Mobile Menu */}
-      {mobileMenuOpen && (
+      {mobileMenuOpen && !isLoggedIn && (
         <div className="md:hidden border-t bg-white animate-slide-down">
           <nav className="flex flex-col p-4 space-y-1">
             {allMenus.map((item) => {

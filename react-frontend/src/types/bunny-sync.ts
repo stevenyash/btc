@@ -27,6 +27,52 @@ export interface MappingItem {
   } | null;
 }
 
+export interface FilenameLinkCandidate {
+  bunnyVideoId: string;
+  filename: string;
+  parsed: {
+    grade: string;
+    area: string;
+    subtopic: string;
+  } | null;
+  status: 'matched' | 'create_lesson' | 'unmatched' | 'ambiguous' | 'already_linked' | 'lesson_already_linked';
+  message: string;
+  matchedLesson?: {
+    id: number;
+    title: string;
+  };
+  matchedHierarchy?: {
+    levelId: number;
+    gradeId: number;
+    areaId: number;
+    topicId: number;
+    subtopicId: number;
+    grade: string;
+    area: string;
+    topic: string;
+    subtopic: string;
+  };
+  suggestions?: Array<{
+    id: number;
+    name?: string;
+    title?: string;
+    score?: number;
+  }>;
+}
+
+export interface FilenameBatchLink {
+  bunnyVideoId: string;
+  lessonId?: number;
+  createLesson?: {
+    levelId: number;
+    gradeId: number;
+    areaId: number;
+    topicId: number;
+    subtopicId: number;
+    filename: string;
+  };
+}
+
 /**
  * API response for pending lessons
  */
@@ -122,6 +168,7 @@ export interface ReconciliationDetail {
 }
 
 export interface ReconciliationResult {
+  dryRun: boolean;
   totalVideos: number;
   linked: number;
   skipped: number;
@@ -164,7 +211,16 @@ export interface MappingSummary {
 
 export interface MappingStatusResponse {
   success: boolean;
-  data: MappingItem[];
+  data: Array<{
+    guid: string;
+    title: string;
+    status?: string | number;
+    isMapped: boolean;
+    mappedLesson?: {
+      lessonId: number;
+      lessonTitle: string;
+    } | null;
+  }>;
   summary: MappingSummary;
 }
 
@@ -175,6 +231,7 @@ export interface Level {
   level_id: number;
   name: string;
   description?: string;
+  is_active?: boolean;
 }
 
 export interface Grade {
@@ -182,6 +239,7 @@ export interface Grade {
   name: string;
   description?: string;
   level_id: number;
+  is_active?: boolean;
 }
 
 export interface Area {
@@ -190,6 +248,7 @@ export interface Area {
   grade_id: number;
   color?: string;
   icon?: string;
+  is_active?: boolean;
 }
 
 export interface Topic {

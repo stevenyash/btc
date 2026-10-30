@@ -50,6 +50,8 @@ interface Lesson {
   file_size?: number;
   duration?: number;
   thumbnail_url?: string | null;
+  bunny_video_id?: string | null;
+  transcoding_status?: string | null;
   price?: number;
   is_preview_available?: boolean;
   preview_duration?: number;
@@ -129,7 +131,9 @@ class LearningHierarchyService {
       const lessons = await DB.Lessons.findAll({
         where: { 
           area_id: areaId,
-          is_active: true 
+          is_active: true,
+          bunny_video_id: { [DB.op.not]: null, [DB.op.ne]: '' },
+          transcoding_status: 'completed',
         },
         order: [['title', 'ASC']],
         raw: true
@@ -189,9 +193,11 @@ class LearningHierarchyService {
       const lessons = await DB.Lessons.findAll({
         where: {
           title: {
-            [DB.Op.like]: `%${query}%`
+            [DB.op.like]: `%${query}%`
           },
-          is_active: true
+          is_active: true,
+          bunny_video_id: { [DB.op.not]: null, [DB.op.ne]: '' },
+          transcoding_status: 'completed',
         },
         order: [['title', 'ASC']],
         raw: true
@@ -207,7 +213,12 @@ class LearningHierarchyService {
   async getLearningPath(lessonId: number): Promise<{ level: LearningLevel | null; grade: Grade | null; area: LearningArea | null; lesson: Lesson | null }> {
     try {
       const lesson = await DB.Lessons.findOne({
-        where: { id: lessonId },
+        where: {
+          id: lessonId,
+          is_active: true,
+          bunny_video_id: { [DB.op.not]: null, [DB.op.ne]: '' },
+          transcoding_status: 'completed',
+        },
         raw: true
       });
 

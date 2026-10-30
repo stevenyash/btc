@@ -5,20 +5,86 @@ import { body } from 'express-validator';
 import utils from '../helpers/utils.js';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
+import { sequelize } from '../models/db.js';
 import bunnyConfig from '../config/bunny.js';
-import { guestLessonActivation } from './mpesa.js';
+import {
+  guestSessionOrAuthenticatedMiddleware,
+  requireMatchingGuestPhone,
+} from '../helpers/guestSession.js';
 
 const router = Router();
+
+async function isGuestPhoneAccount(phone: string): Promise<boolean> {
+  const user = await DB.Users.findOne({
+    where: { phone },
+    attributes: ['id', 'username'],
+    raw: true,
+  });
+  if (!user || !String(user.username || '').startsWith('guest_')) return false;
+
+  const activeSubscription = await DB.Subscriptions.findOne({
+    where: {
+      user_id: String(user.id),
+      status: 'active',
+      expiry_date: { [Op.gte]: new Date() },
+    },
+    attributes: ['id'],
+    raw: true,
+  });
+  return !activeSubscription;
+}
 
 // ============================================
 // LEARNING CONTENT ENDPOINTS
 // ============================================
 
+async function getAreasWithAvailableLessons(gradeId?: string) {
+  const lessons = await DB.Lessons.findAll({
+    where: {
+      is_active: true,
+      bunny_video_id: { [Op.not]: null, [Op.ne]: '' },
+      transcoding_status: 'completed',
+    },
+    attributes: ['area_id'],
+    raw: true,
+  });
+  const areaIds = [...new Set(
+    lessons
+      .map((lesson: any) => Number(lesson.area_id))
+      .filter((areaId: number) => Number.isInteger(areaId) && areaId > 0)
+  )];
+  if (areaIds.length === 0) return [];
+
+  const where: any = { is_active: true, id: { [Op.in]: areaIds } };
+  if (gradeId) where.grade_id = gradeId;
+  return DB.LearningAreas.findAll({
+    where,
+    attributes: ['id', 'grade_id'],
+    raw: true,
+  });
+}
+
   // Get learning levels
   router.get('/learninglevels', async (req: Request, res: Response) => {
     try {
+      const areas = await getAreasWithAvailableLessons();
+      const gradeIds = [...new Set(areas.map((area: any) => area.grade_id).filter(Boolean))];
+      if (gradeIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
+      const grades = await DB.Grades.findAll({
+        where: { id: { [Op.in]: gradeIds }, is_active: true },
+        attributes: ['level_id'],
+        raw: true,
+      });
+      const levelIds = [...new Set(grades.map((grade: any) => grade.level_id).filter(Boolean))];
+      if (levelIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
       const levels = await DB.LearningLevels.findAll({
-        where: { is_active: true },
+        where: { level_id: { [Op.in]: levelIds }, is_active: true },
         attributes: ['level_id', 'name', 'description'],
         order: [['name', 'ASC']],
         raw: true
@@ -37,9 +103,15 @@ const router = Router();
       if (!levelId) {
         return res.status(400).json({ error: 'Level ID is required' });
       }
-      
+
+      const areas = await getAreasWithAvailableLessons();
+      const gradeIds = [...new Set(areas.map((area: any) => area.grade_id).filter(Boolean))];
+      if (gradeIds.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+
       const grades = await DB.Grades.findAll({
-        where: { level_id: levelId, is_active: true },
+        where: { id: { [Op.in]: gradeIds }, level_id: levelId, is_active: true },
         attributes: ['id', 'name', 'description'],
         order: [['name', 'ASC']],
         raw: true
@@ -55,8 +127,15 @@ const router = Router();
 // Get learning areas
 router.get('/learningareas', async (req: Request, res: Response) => {
   try {
+    const gradeId = typeof req.query.grade_id === 'string' ? req.query.grade_id : undefined;
+    const availableAreas = await getAreasWithAvailableLessons(gradeId);
+    const areaIds = availableAreas.map((area: any) => area.id);
+    if (areaIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
     const areas = await DB.LearningAreas.findAll({
-      where: { is_active: true },
+      where: { id: { [Op.in]: areaIds }, is_active: true },
       attributes: ['id', 'name', 'color', 'icon', 'description'],
       order: [['name', 'ASC']],
       raw: true
@@ -72,7 +151,11 @@ router.get('/learningareas', async (req: Request, res: Response) => {
 router.get('/lessons', async (req: Request, res: Response) => {
   try {
     const { area_id, grade_id, topic_id, subtopic_id, limit = 50, page = 1 } = req.query;
-    const where: any = { is_active: true };
+    const where: any = {
+      is_active: true,
+      bunny_video_id: { [Op.not]: null, [Op.ne]: '' },
+      transcoding_status: 'completed',
+    };
     
     if (area_id) where.area_id = area_id;
     if (topic_id) where.topic_id = topic_id;
@@ -139,7 +222,12 @@ router.get('/lesson/:id', async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     
      const lesson = await DB.Lessons.findOne({
-      where: { id, is_active: true },
+      where: {
+        id,
+        is_active: true,
+        bunny_video_id: { [Op.not]: null, [Op.ne]: '' },
+        transcoding_status: 'completed',
+      },
       include: [
         { 
           model: DB.LearningAreas, 
@@ -249,7 +337,7 @@ router.get('/packages_public', async (req: Request, res: Response) => {
 // GUEST & USER MANAGEMENT ENDPOINTS
 // ============================================
 
-// Verify phone number - returns true for pure guests (no user account), false if already registered
+// Verify guest phones, including internal guest user rows created during payment activation.
 router.get('/verify_phone/:phone', async (req: Request, res: Response) => {
   try {
     const { phone } = req.params;
@@ -266,9 +354,7 @@ router.get('/verify_phone/:phone', async (req: Request, res: Response) => {
       raw: true
     });
     
-    // If phone exists in Users table, it's a registered user (not a pure guest)
-    // Return verified=false so they log in properly instead of using guest access
-    if (user) {
+    if (user && !await isGuestPhoneAccount(cleanPhone)) {
       return res.json({ 
         verified: false, 
         isRegisteredUser: true,
@@ -277,10 +363,10 @@ router.get('/verify_phone/:phone', async (req: Request, res: Response) => {
       });
     }
     
-    // For pure guests: no user account exists, phone is valid for guest access
+    // Guest payment activation may create an internal guest user row for transaction history.
     return res.json({ 
       verified: true, 
-      isNew: true, 
+      isNew: !user,
       phone: cleanPhone 
     });
   } catch (err) {
@@ -309,8 +395,7 @@ router.post('/register_guest', [
       attributes: ['id', 'account_status']
     });
     
-    if (existingUser) {
-      // Phone belongs to a registered user - they should log in properly, not use guest access
+    if (existingUser && !await isGuestPhoneAccount(cleanPhone)) {
       return res.status(409).json({ error: "Phone number already registered. Please log in instead." });
     }
 
@@ -331,6 +416,7 @@ router.post('/register_guest', [
 
 // Get subscriber details (subscription, package, lesson track)
 router.get('/subscriberdetails', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
     const userId = (req as any).user?.id;
 
@@ -397,6 +483,8 @@ router.get('/subscriberdetails', async (req: Request, res: Response) => {
         lessons_viewed: lessonTrack.lessons_viewed || 0,
         lesson_balance: lessonTrack.lesson_balance || 0,
         total_lessons: lessonTrack.total_lessons || 0,
+        remaining_watch_time_seconds: Number(lessonTrack.remaining_watch_time_seconds || 0),
+        total_watch_time_seconds: Number(lessonTrack.total_watch_time_seconds || 0),
         status: lessonTrack.status,
         package_id: lessonTrack.package_id,
         total_completed: totalLessonsViewed
@@ -410,6 +498,7 @@ router.get('/subscriberdetails', async (req: Request, res: Response) => {
         subscription_type_membership_fee: subscriptionType?.membership_fee || null,
         concurrent_access: packages.concurrent_access,
         no_of_lessons: packages.no_of_lessons,
+        watch_time_minutes: packages.watch_time_minutes,
         duration_amount: packages.duration_amount,
         duration_unit: packages.duration_unit,
         fee: packages.fee
@@ -441,7 +530,7 @@ router.get('/subscriberdetails', async (req: Request, res: Response) => {
 // ============================================
 
 // Batch check guest lesson purchase statuses
-router.post('/guest_lessons_status', async (req: Request, res: Response) => {
+router.post('/guest_lessons_status', guestSessionOrAuthenticatedMiddleware, async (req: Request, res: Response) => {
   try {
     const { phone, lesson_ids } = req.body;
     
@@ -449,31 +538,47 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Phone and lesson_ids array required' });
     }
 
-    const cleanPhone = (Array.isArray(phone) ? phone[0] : phone).replace(/^0/, "254").replace(/\D/g, "");
+    const cleanPhone = requireMatchingGuestPhone(req, phone);
+    if (!cleanPhone) {
+      return res.status(403).json({ error: 'Verify the phone number to view its lesson purchases' });
+    }
+
+    if (lesson_ids.length > 100 || lesson_ids.some((id: unknown) =>
+      !Number.isInteger(Number(id)) || Number(id) <= 0
+    )) {
+      return res.status(400).json({ error: 'lesson_ids must contain up to 100 valid lesson IDs' });
+    }
+
     const results = await Promise.all(lesson_ids.map(async (lessonId: string) => {
       try {
         // Check various payment sources
+        const now = new Date();
         const [payment, tracker, transaction] = await Promise.all([
-          DB.GuestLessonPayments.findOne({
-            where: { phone: cleanPhone, lesson_id: lessonId, transaction_status: 'completed' },
-            raw: true
-          }),
+          DB.GuestLessonPayments.findActiveByPhoneAndLesson(cleanPhone, Number(lessonId)),
           DB.GuestTracker.findOne({
-            where: { phone: cleanPhone, lesson_id: lessonId, status: 'completed' },
+            where: {
+              phone: cleanPhone,
+              lesson_id: lessonId,
+              status: 'completed',
+              expires_at: { [Op.gt]: now },
+            },
             raw: true
           }),
           DB.Transactions.findOne({
-            where: { phone_number: cleanPhone, lesson_id: lessonId, status: 'success', payment_status: 'completed' },
+            where: {
+              phone_number: cleanPhone,
+              lesson_id: lessonId,
+              status: 'success',
+              payment_status: 'completed',
+            },
             raw: true
           })
         ]);
-
-        const purchased = !!(payment || tracker || transaction);
         
         // Get lesson details
         const lesson = await DB.Lessons.findOne({
           where: { id: lessonId },
-           attributes: ['duration', 'is_preview_available', 'price']
+          attributes: ['duration', 'is_preview_available', 'price']
         });
         
         // Get non-subscribed lesson settings for guest preview duration
@@ -481,12 +586,8 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
           where: { subscription_type: 'non_subscribed' },
           raw: true
         });
-        const nonSubscribedDurationSeconds = (lessonSettings?.duration || 90) * 60; // Convert minutes to seconds
+        const nonSubscribedDurationSeconds = (Number(lessonSettings?.duration) || 90) * 60;
 
-        const maxWatchTime = purchased 
-           ? (lesson as any)?.duration * 60 || 3600 
-           : (lesson as any)?.is_preview_available ? nonSubscribedDurationSeconds : 0;
-        
         let expiresAt = null;
         if (payment?.expires_at) {
           expiresAt = new Date(payment.expires_at);
@@ -494,7 +595,7 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
           expiresAt = new Date(tracker.expires_at);
         } else if (transaction?.created_at) {
           expiresAt = new Date(transaction.created_at);
-          expiresAt.setDate(expiresAt.getDate() + 30);
+          expiresAt.setMinutes(expiresAt.getMinutes() + nonSubscribedDurationSeconds / 60);
         }
 
         // Get watch time from LessonAccessLogs
@@ -505,27 +606,30 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
           },
           attributes: ['watch_time']
         });
+        const accessIsActive = Boolean(expiresAt && expiresAt > now);
+        const remainingWatchTime = payment
+          ? Math.max(0, Number(payment.watch_time_limit_seconds) - Number(payment.watch_time_used_seconds))
+          : Math.max(0, nonSubscribedDurationSeconds - Number(watchRecord?.watch_time || 0));
+        const purchased = payment
+          ? remainingWatchTime > 0
+          : accessIsActive && remainingWatchTime > 0;
+        const maxWatchTime = purchased
+          ? remainingWatchTime
+          : (lesson as any)?.is_preview_available ? nonSubscribedDurationSeconds : 0;
 
         return {
           lesson_id: lessonId,
           purchased,
           watch_time: watchRecord?.watch_time || 0,
           max_watch_time: maxWatchTime,
+          remaining_watch_time_seconds: maxWatchTime,
           expires_at: expiresAt?.toISOString() || null,
           is_preview_available: (lesson as any)?.is_preview_available || false,
           price: (lesson as any)?.price || 0
         };
       } catch (err) {
         console.error(`Error checking lesson ${lessonId}:`, err);
-        return {
-          lesson_id: lessonId,
-          purchased: false,
-          watch_time: 0,
-          max_watch_time: 300,
-          expires_at: null,
-          is_preview_available: false,
-          price: 0
-        };
+        throw err;
       }
     }));
 
@@ -538,40 +642,9 @@ router.post('/guest_lessons_status', async (req: Request, res: Response) => {
 
 // Purchase lesson for guest
 router.post('/guest_purchase_lesson', async (req: Request, res: Response) => {
-  try {
-    const { phone, lesson_id, amount, checkoutRequestID, transactionID, duration } = req.body;
-    const cleanPhone = String(phone).replace(/^0/, "254").replace(/\D/g, "");
-    const lessonId = Number(lesson_id);
-
-    if (!cleanPhone || cleanPhone.length !== 12 || !lessonId) {
-      return res.status(400).json({ error: 'Valid phone and lesson_id required' });
-    }
-
-    const result = await guestLessonActivation(
-      checkoutRequestID || `manual_${Date.now()}`,
-      {
-        lessonId,
-        activationType: 'guestlessonactivation',
-        ...(duration && { duration }),
-      },
-      {
-        phoneNumber: cleanPhone,
-        amount: Number(amount) || 0,
-        status: 'completed',
-        transactionID,
-        createdAt: new Date(),
-      }
-    );
-
-    if (result.success) {
-      return res.json(result);
-    } else {
-      return res.status(400).json(result);
-    }
-  } catch (err) {
-    console.error('Guest purchase lesson error:', err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
-  }
+  return res.status(410).json({
+    error: 'Client-submitted purchase records cannot grant lesson access. Complete M-Pesa verification instead.',
+  });
 });
 
 // Lesson fees endpoint
@@ -603,9 +676,9 @@ router.get('/lesson_fees', async (req: Request, res: Response) => {
 });
 
 // Update guest watch time
-router.post('/guest_update_watch_time', async (req: Request, res: Response) => {
+router.post('/guest_update_watch_time', guestSessionOrAuthenticatedMiddleware, async (req: Request, res: Response) => {
   try {
-    const { phone, lesson_id, watch_time = 0, session_id } = req.body;
+    const { phone, lesson_id, watch_time = 0, session_id, device_id } = req.body;
     const userId = (req as any).user?.id;
     
     // Validation
@@ -615,6 +688,74 @@ router.post('/guest_update_watch_time', async (req: Request, res: Response) => {
     
     if (!userId && !phone) {
       return res.status(400).json({ error: 'Either user ID or phone number is required' });
+    }
+
+    if (phone) {
+      const cleanPhone = requireMatchingGuestPhone(req, phone);
+      if (!cleanPhone) {
+        return res.status(403).json({ error: 'Verify the phone number to update its lesson watch time' });
+      }
+      const watchedSeconds = Number(watch_time);
+      if (!/^254\d{9}$/.test(cleanPhone) ||
+          !Number.isInteger(watchedSeconds) ||
+          watchedSeconds <= 0 ||
+          watchedSeconds > 300 ||
+          !Number.isInteger(Number(lesson_id)) ||
+          Number(lesson_id) <= 0) {
+        return res.status(400).json({ error: 'Valid phone, lesson_id, and watch_time (1-300 seconds) are required' });
+      }
+
+      const result = await sequelize.transaction(async (transaction) => {
+        const payments = await DB.GuestLessonPayments.findAll({
+          where: {
+            phone: cleanPhone,
+            lesson_id: Number(lesson_id),
+            transaction_status: 'completed',
+          },
+          order: [['paid_at', 'DESC']],
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+        const payment = payments.find((grant: any) =>
+          Number(grant.watch_time_used_seconds) < Number(grant.watch_time_limit_seconds)
+        );
+        if (!payment) {
+          throw Object.assign(new Error('No paid watch-time grant remains for this lesson'), {
+            statusCode: 403,
+            code: 'INDIVIDUAL_PURCHASE_REQUIRED',
+          });
+        }
+
+        const available = Math.max(
+          0,
+          Number(payment.watch_time_limit_seconds) - Number(payment.watch_time_used_seconds)
+        );
+        if (available <= 0) {
+          throw Object.assign(new Error('Purchased lesson watch time is exhausted'), {
+            statusCode: 403,
+            code: 'WATCH_TIME_EXHAUSTED',
+          });
+        }
+        const consumed = Math.min(available, watchedSeconds);
+        const updatedUsed = Number(payment.watch_time_used_seconds) + consumed;
+        await payment.update({ watch_time_used_seconds: updatedUsed }, { transaction });
+        if (userId && typeof device_id === 'string' && /^[a-zA-Z0-9_-]{16,128}$/.test(device_id)) {
+          await DB.SubscriptionDeviceSession.update(
+            { last_heartbeat_at: new Date(), lesson_id: Number(lesson_id) },
+            { where: { user_id: userId, device_id }, transaction }
+          );
+        }
+        return { remainingTime: available - consumed, consumed, updatedUsed };
+      });
+
+      return res.json({
+        success: true,
+        watch_time: result.updatedUsed,
+        consumed_seconds: result.consumed,
+        remaining_time: result.remainingTime,
+        remaining_watch_time_seconds: result.remainingTime,
+        is_completed: result.remainingTime <= 0,
+      });
     }
     
     // Get or create guest user
@@ -664,7 +805,21 @@ router.post('/guest_update_watch_time', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Lesson not found' });
     }
     
-     const maxWatchTime = (lesson as any).duration * 60 || 5400;
+     const lessonSetting = await DB.LessonSetting.findOne({
+       where: { subscription_type: 'non_subscribed' },
+       attributes: ['duration'],
+       raw: true
+     });
+     const maxWatchTime = (Number(lessonSetting?.duration) || 90) * 60;
+
+     if (!userId && guestPhone) {
+       const cleanPhone = String(guestPhone).replace(/^0/, "254").replace(/\D/g, "");
+       const activePayment = await DB.GuestLessonPayments.findActiveByPhoneAndLesson(cleanPhone, Number(lesson_id));
+       if (!activePayment) {
+         return res.status(403).json({ error: 'Guest lesson access has expired or is not active' });
+       }
+       guestPhone = cleanPhone;
+     }
     
     // Find or create watch time record
     let watchRecord = await DB.LessonAccessLogs.findOne({
@@ -739,6 +894,10 @@ router.post('/guest_update_watch_time', async (req: Request, res: Response) => {
       progress_percentage: Math.round((currentWatchTime / maxWatchTime) * 100)
     });
   } catch (err) {
+    if (err && typeof err === 'object' && 'statusCode' in err) {
+      const accessError = err as { statusCode: number; code: string; message: string };
+      return res.status(accessError.statusCode).json({ error: accessError.message, code: accessError.code });
+    }
     console.error('Guest update watch time error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -1010,6 +1169,8 @@ router.get('/search', async (req: Request, res: Response) => {
       const lessons = await DB.Lessons.findAll({
         where: {
           is_active: true,
+          bunny_video_id: { [Op.not]: null, [Op.ne]: '' },
+          transcoding_status: 'completed',
           [Op.or]: [
             { title: { [Op.like]: searchTerm } },
             { description: { [Op.like]: searchTerm } }

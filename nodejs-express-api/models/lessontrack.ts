@@ -8,6 +8,8 @@ interface LessonTrackAttributes {
 	user_id: number;
 	lessons_viewed: number | null;
 	lesson_balance: number | null;
+	total_watch_time_seconds: number;
+	remaining_watch_time_seconds: number;
 	total_lessons: number | null;
 	package_id: number;
 	status: LessonTrackStatus;
@@ -32,6 +34,8 @@ class LessonTrack extends BaseModel<LessonTrackAttributes, LessonTrackCreationAt
 				user_id: { type: DataTypes.INTEGER, allowNull: false },
 				lessons_viewed: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
 				lesson_balance: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
+				total_watch_time_seconds: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false, defaultValue: 0 },
+				remaining_watch_time_seconds: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false, defaultValue: 0 },
 				total_lessons: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 0 },
 				package_id: { type: DataTypes.INTEGER, allowNull: false },
 				status: {
@@ -60,15 +64,15 @@ class LessonTrack extends BaseModel<LessonTrackAttributes, LessonTrackCreationAt
 	}
 
 	static listFields(): string[] {
-		return ["id", "subscription_id", "user_id", "lessons_viewed", "lesson_balance", "total_lessons", "package_id", "status", "last_accessed", "expires_at", "created_at"];
+		return ["id", "subscription_id", "user_id", "lessons_viewed", "lesson_balance", "total_lessons", "total_watch_time_seconds", "remaining_watch_time_seconds", "package_id", "status", "last_accessed", "expires_at", "created_at"];
 	}
 
 	static viewFields(): string[] {
-		return ["id", "subscription_id", "user_id", "lessons_viewed", "lesson_balance", "total_lessons", "package_id", "status", "last_accessed", "expires_at", "created_at", "updated_at"];
+		return ["id", "subscription_id", "user_id", "lessons_viewed", "lesson_balance", "total_lessons", "total_watch_time_seconds", "remaining_watch_time_seconds", "package_id", "status", "last_accessed", "expires_at", "created_at", "updated_at"];
 	}
 
 	static editFields(): string[] {
-		return ["subscription_id", "user_id", "lessons_viewed", "lesson_balance", "total_lessons", "package_id", "status", "last_accessed", "expires_at", "id"];
+		return ["subscription_id", "user_id", "lessons_viewed", "lesson_balance", "total_lessons", "total_watch_time_seconds", "remaining_watch_time_seconds", "package_id", "status", "last_accessed", "expires_at", "id"];
 	}
 
 	static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {

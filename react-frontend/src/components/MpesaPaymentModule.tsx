@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Phone } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Phone, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,14 +12,14 @@ import { useMpesaStore, type BusinessMetadata } from "@/stores/useMpesaStore";
    businessMetadata?: BusinessMetadata;
    defaultPhone?: string;
    readonlyPhone?: boolean;
-   skipActivation?: boolean; // If true, callback handles activation - don't activate manually
    onSuccess: (transaction: {
      checkoutRequestID: string;
      transactionID?: string;
      amount: number;
      phoneNumber: string;
      businessMetadata?: BusinessMetadata;
-   }) => void;
+     guestSessionKey?: string;
+   }) => void | Promise<void>;
    onFailure: (error: string) => void;
  }
 
@@ -29,7 +29,6 @@ export function MpesaPaymentModule({
   businessMetadata,
   defaultPhone,
   readonlyPhone = false,
-  skipActivation = false,
   onSuccess,
   onFailure,
 }: MpesaPaymentModuleProps) {
@@ -44,24 +43,35 @@ export function MpesaPaymentModule({
     pay,
     verify,
     reset,
-    activate,
+    guestSessionKey,
   } = useMpesaStore();
+
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const [completionAttempt, setCompletionAttempt] = useState(0);
+  const handledCheckoutIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (status === "success" && transaction) {
-      // Only activate manually if skipActivation is false (callback handles it automatically)
-      if (!skipActivation) {
-        activate(transaction.checkoutRequestID, transaction.businessMetadata);
-      }
-      onSuccess({
-        checkoutRequestID: transaction.checkoutRequestID,
-        transactionID: transaction.transactionID,
-        amount: transaction.amount,
-        phoneNumber: transaction.phoneNumber,
-        businessMetadata: transaction.businessMetadata,
-      });
+      if (handledCheckoutIdRef.current === transaction.checkoutRequestID) return;
+      handledCheckoutIdRef.current = transaction.checkoutRequestID;
+      void Promise.resolve(onSuccess({
+          checkoutRequestID: transaction.checkoutRequestID,
+          transactionID: transaction.transactionID,
+          amount: transaction.amount,
+          phoneNumber: transaction.phoneNumber,
+          businessMetadata: transaction.businessMetadata,
+          guestSessionKey: transaction.guestSessionKey ?? guestSessionKey ?? undefined,
+        }))
+        .then(() => setCompletionError(null))
+        .catch((error: unknown) => {
+          console.error("Payment confirmation follow-up failed:", error);
+          handledCheckoutIdRef.current = null;
+          setCompletionError(
+            error instanceof Error ? error.message : "Payment confirmed, but lesson access could not be finalized."
+          );
+        });
     }
-  }, [status, transaction, skipActivation, onSuccess]);
+  }, [status, transaction, guestSessionKey, onSuccess, completionAttempt]);
 
   useEffect(() => {
     if (status === "error" && error) {
@@ -82,6 +92,8 @@ export function MpesaPaymentModule({
 
   const handleRetry = () => {
     reset();
+    handledCheckoutIdRef.current = null;
+    setCompletionError(null);
   };
 
   const formatPhone = (value: string): string => {
@@ -202,8 +214,9 @@ export function MpesaPaymentModule({
             </Button>
           </div>
           
+          {error && <p className="text-sm text-center text-amber-700">{error}</p>}
           <p className="text-xs text-center text-muted-foreground">
-            Waiting for M-Pesa prompt? Click "Check Payment Status" to verify
+            Leave this page open while you check your phone. Cancel closes this screen but does not cancel the M-Pesa prompt.
           </p>
         </CardContent>
       </Card>
@@ -219,12 +232,20 @@ export function MpesaPaymentModule({
           <p className="text-sm text-muted-foreground">
             Transaction ID: {transaction.transactionID || checkoutId}
           </p>
-          <p className="text-sm text-green-600 mt-2">
-            Subscription activated successfully
-          </p>
-          <p className="text-xs text-muted-foreground mt-4">
-            Redirecting to dashboard...
-          </p>
+          <p className="text-sm text-green-600 mt-2">Payment confirmed.</p>
+          {completionError && (
+            <div className="mt-4 space-y-3 text-center">
+              <p className="text-sm text-red-600" role="alert">{completionError}</p>
+              <Button
+                onClick={() => setCompletionAttempt((attempt) => attempt + 1)}
+                variant="outline"
+                className="w-full"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry access setup
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     );

@@ -31,6 +31,7 @@ export default function AdminPackagesPage() {
     fee: 0,
     concurrent_access: 1,
     no_of_lessons: 0,
+    watch_time_minutes: 0,
     duration_amount: 1,
     duration_unit: "month"
   })
@@ -90,6 +91,7 @@ export default function AdminPackagesPage() {
         fee: pkg.fee,
         concurrent_access: pkg.concurrent_access,
         no_of_lessons: pkg.no_of_lessons,
+        watch_time_minutes: pkg.watch_time_minutes,
         duration_amount: pkg.duration_amount,
         duration_unit: pkg.duration_unit
       })
@@ -102,6 +104,7 @@ export default function AdminPackagesPage() {
         fee: 0,
         concurrent_access: 1,
         no_of_lessons: 0,
+        watch_time_minutes: 0,
         duration_amount: 1,
         duration_unit: "month"
       })
@@ -237,6 +240,7 @@ export default function AdminPackagesPage() {
                     <th className="text-left py-3 px-4 font-medium">Type</th>
                     <th className="text-left py-3 px-4 font-medium">Fee</th>
                     <th className="text-left py-3 px-4 font-medium">Lessons</th>
+                    <th className="text-left py-3 px-4 font-medium">Watch Time</th>
                     <th className="text-left py-3 px-4 font-medium">Duration</th>
                     <th className="text-left py-3 px-4 font-medium">Devices</th>
                     <th className="text-left py-3 px-4 font-medium">Created</th>
@@ -246,13 +250,13 @@ export default function AdminPackagesPage() {
                 <tbody>
                   {isLoading && packages.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8">
+                      <td colSpan={10} className="text-center py-8">
                         <RefreshCw className="h-6 w-6 animate-spin mx-auto" />
                       </td>
                     </tr>
                   ) : filteredPackages.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-gray-500">
+                      <td colSpan={10} className="text-center py-8 text-gray-500">
                         No packages found
                       </td>
                     </tr>
@@ -268,6 +272,7 @@ export default function AdminPackagesPage() {
                         </td>
                         <td className="py-3 px-4">{formatCurrency(pkg.fee)}</td>
                         <td className="py-3 px-4">{pkg.no_of_lessons}</td>
+                        <td className="py-3 px-4">{pkg.watch_time_minutes} min</td>
                         <td className="py-3 px-4">{pkg.duration_amount} {pkg.duration_unit}(s)</td>
                         <td className="py-3 px-4">{pkg.concurrent_access}</td>
                         <td className="py-3 px-4">{formatDate(pkg.created_at)}</td>
@@ -414,6 +419,17 @@ export default function AdminPackagesPage() {
                     min="0"
                     value={formData.no_of_lessons}
                     onChange={(e) => setFormData({ ...formData, no_of_lessons: Number(e.target.value) })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="watch_time_minutes">Total Watch Time (minutes) *</Label>
+                  <Input
+                    id="watch_time_minutes"
+                    type="number"
+                    min="1"
+                    value={formData.watch_time_minutes}
+                    onChange={(e) => setFormData({ ...formData, watch_time_minutes: Number(e.target.value) })}
                     required
                   />
                 </div>

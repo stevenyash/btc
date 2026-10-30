@@ -4,9 +4,75 @@ import bunnyService, { getStreamUrl, getThumbnailUrl, mapStatus } from '../servi
 interface ParsedHierarchy {
   gradeName: string;
   areaName: string;
-  topicName: string;
+  topicName?: string;
   subtopicName: string;
   collectionName?: string;
+}
+
+function normalizeMatchName(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeLearningAreaName(value: string): string {
+  const normalized = normalizeMatchName(value);
+  if (normalized === 'math' || normalized === 'maths') return 'mathematics';
+  return normalized;
+}
+
+function nameSimilarity(leftValue: string, rightValue: string): number {
+  const left = normalizeMatchName(leftValue);
+  const right = normalizeMatchName(rightValue);
+  const longest = Math.max(left.length, right.length);
+  if (longest === 0) return 1;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i++) {
+    let diagonal = previous[0];
+    previous[0] = i;
+    for (let j = 1; j <= right.length; j++) {
+      const above = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        diagonal + (left[i - 1] === right[j - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return 1 - previous[right.length] / longest;
+}
+
+function strictParseVideoTitle(title: string): ParsedHierarchy | null {
+  const stem = title.replace(/\.[^/.]+$/, '').trim();
+  const parts = stem.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const prefix = parts[0].match(/^(grade\s+\d+|form\s+\d+|senior\s+\d+|year\s+\d+|class\s+\d+)\s+(.+)$/i);
+  if (!prefix || !prefix[2].trim()) return null;
+
+  // For 3+ part titles (Grade Area - Topic - Subtopic), use parts[1] as topic and rest as subtopic.
+  if (parts.length >= 3) {
+    return {
+      gradeName: prefix[1],
+      areaName: prefix[2].trim(),
+      topicName: parts[1],
+      subtopicName: parts.slice(2).join(' - ').trim(),
+    };
+  }
+
+  // 2-part title: Grade Area - Lesson title; no topic was provided.
+  return {
+    gradeName: prefix[1],
+    areaName: prefix[2].trim(),
+    topicName: undefined,
+    subtopicName: parts[1],
+  };
 }
 
 interface BunnyVideo {
@@ -25,7 +91,46 @@ interface BunnyVideo {
   storageSize?: number;
 }
 
+async function getAllStreamVideos(): Promise<BunnyVideo[]> {
+  const videos: BunnyVideo[] = [];
+  const seenVideoIds = new Set<string>();
+  let page = 1;
+  let expectedTotal = Number.POSITIVE_INFINITY;
+
+  while (videos.length < expectedTotal) {
+    const response = await bunnyService.getStreamVideos(page, 100);
+    const pageVideos = response.items || response.videos || [];
+    if (pageVideos.length === 0) break;
+
+    let addedOnPage = 0;
+    for (const video of pageVideos) {
+      if (!video.guid || seenVideoIds.has(video.guid)) continue;
+      seenVideoIds.add(video.guid);
+      videos.push({
+        ...video,
+        status: typeof video.status === 'number' ? mapStatus(video.status) : video.status || 'processing',
+        videoUrl: video.videoUrl || getStreamUrl(video.guid),
+        thumbnailUrl: video.thumbnailUrl || getThumbnailUrl(video.guid),
+      });
+      addedOnPage++;
+    }
+    if (addedOnPage === 0) break;
+
+    const totalItems = Number(response.totalItems);
+    const itemsPerPage = Number(response.itemsPerPage) || 100;
+    if (Number.isFinite(totalItems) && totalItems > 0) {
+      expectedTotal = totalItems;
+    } else if (pageVideos.length < itemsPerPage) {
+      break;
+    }
+    page++;
+  }
+
+  return videos;
+}
+
 interface ReconciliationResult {
+  dryRun: boolean;
   totalVideos: number;
   linked: number;
   skipped: number;
@@ -231,7 +336,7 @@ class BunnyReconciliationService {
       // Try any active level with similar name (case insensitive)
       level = await DB.LearningLevels.findOne({
         where: { 
-          name: { [DB.Op.like]: levelName },
+          name: { [DB.op.like]: levelName },
           is_active: true 
         },
         raw: true
@@ -267,7 +372,7 @@ class BunnyReconciliationService {
 
       // Try case-insensitive
       grade = await DB.Grades.findOne({
-        where: { name: { [DB.Op.like]: cleanName } },
+        where: { name: { [DB.op.like]: cleanName } },
         raw: true
       });
      if (grade) return grade;
@@ -277,7 +382,7 @@ class BunnyReconciliationService {
      if (gradeMatch) {
         const standardName = `${gradeMatch[1]} ${gradeMatch[2]}`;
         grade = await DB.Grades.findOne({
-          where: { name: { [DB.Op.like]: `%${standardName}%` } },
+          where: { name: { [DB.op.like]: `%${standardName}%` } },
           raw: true
         });
        if (grade) return grade;
@@ -307,6 +412,9 @@ class BunnyReconciliationService {
      */
     private async getOrCreateArea(areaName: string, gradeId: number): Promise<any | null> {
       let cleanName = areaName.replace(/\.mp4$/i, '').trim();
+      if (normalizeLearningAreaName(cleanName) === 'mathematics') {
+        cleanName = 'Mathematics';
+      }
 
       // Try exact match
       let area = await DB.LearningAreas.findOne({
@@ -318,7 +426,7 @@ class BunnyReconciliationService {
       // Try case-insensitive
       area = await DB.LearningAreas.findOne({
         where: {
-          name: { [DB.Op.like]: cleanName },
+          name: { [DB.op.like]: cleanName },
           grade_id: gradeId
         },
         raw: true
@@ -330,12 +438,33 @@ class BunnyReconciliationService {
       if (withoutNumber !== cleanName) {
         area = await DB.LearningAreas.findOne({
           where: {
-            name: { [DB.Op.like]: withoutNumber },
+            name: { [DB.op.like]: withoutNumber },
             grade_id: gradeId
           },
           raw: true
         });
         if (area) return area;
+      }
+
+      const candidateAreas = await DB.LearningAreas.findAll({
+        where: { grade_id: gradeId },
+        attributes: ['id', 'name'],
+        raw: true,
+      });
+      const rankedAreas = candidateAreas
+        .map((candidate: any) => ({
+          area: candidate,
+          score: nameSimilarity(
+            normalizeLearningAreaName(cleanName),
+            normalizeLearningAreaName(candidate.name || '')
+          ),
+        }))
+        .sort((left: any, right: any) => right.score - left.score);
+      if (
+        rankedAreas[0]?.score >= 0.8 &&
+        (!rankedAreas[1] || rankedAreas[0].score - rankedAreas[1].score >= 0.08)
+      ) {
+        return rankedAreas[0].area;
       }
 
       // NOT FOUND - Create new area
@@ -355,9 +484,15 @@ class BunnyReconciliationService {
      * Get or create topic under a learning area with smart matching
      * Auto-creates if not found
      */
-    private async getOrCreateTopic(topicName: string, areaId: number): Promise<any | null> {
-     // Clean topic name (remove .mp4, trim)
-     let cleanName = topicName.replace(/\.mp4$/i, '').trim();
+private async getOrCreateTopic(topicName: string, areaId: number): Promise<any | null> {
+      // Handle undefined/null topicName - create a "General" topic instead of crashing
+      if (!topicName || typeof topicName !== 'string') {
+        console.log(`  ⚠️  Topic name is empty/undefined, using "General" topic`);
+        topicName = 'General';
+      }
+      
+      // Clean topic name (remove .mp4, trim)
+      let cleanName = topicName.replace(/\.mp4$/i, '').trim();
      
      // Try exact match
      let topic = await DB.Topics.findOne({
@@ -369,7 +504,7 @@ class BunnyReconciliationService {
       // Try case-insensitive
       topic = await DB.Topics.findOne({
         where: {
-          name: { [DB.Op.like]: cleanName },
+          name: { [DB.op.like]: cleanName },
           area_id: areaId
         },
         raw: true
@@ -410,7 +545,7 @@ class BunnyReconciliationService {
       // Try case-insensitive
       subtopic = await DB.Subtopics.findOne({
         where: {
-          name: { [DB.Op.like]: cleanName },
+          name: { [DB.op.like]: cleanName },
           topic_id: topicId
         },
         raw: true
@@ -475,6 +610,10 @@ class BunnyReconciliationService {
       let lesson = await DB.Lessons.findOne({ where, raw: true });
 
       if (lesson) {
+        if (videoData?.guid && lesson.bunny_video_id && lesson.bunny_video_id !== videoData.guid) {
+          throw new Error(`Lesson is already linked to Bunny video ${lesson.bunny_video_id}`);
+        }
+
         // Update existing lesson with latest Bunny metadata (excluding linking fields)
         if (videoData) {
           console.log(`  🔄 Updating existing lesson ${lesson.id} with Bunny video metadata`);
@@ -559,6 +698,51 @@ lesson = await DB.Lessons.findOne({ where, raw: true });
         }
         console.log(`  📖 Area found/created: ${parsed.areaName} (id=${area.id})`);
 
+        if (!parsed.topicName) {
+          const targetName = normalizeMatchName(parsed.subtopicName);
+          const lessons = await DB.Lessons.findAll({
+            where: { area_id: area.id, is_active: true },
+            include: [{
+              model: DB.Subtopics,
+              as: 'subtopic',
+              attributes: ['subtopic_id', 'name'],
+              required: false,
+            }],
+          });
+          const matchingLessons = lessons.filter((lesson: any) => {
+            const data = lesson.toJSON();
+            return normalizeMatchName(data.title || '') === targetName ||
+              normalizeMatchName(data.subtopic?.name || '') === targetName;
+          });
+          if (matchingLessons.length > 1) {
+            throw new Error(`More than one existing lesson matches "${parsed.subtopicName}"`);
+          }
+          if (matchingLessons.length === 1) {
+            const existingLesson: any = matchingLessons[0];
+            const data = existingLesson.toJSON();
+            if (data.bunny_video_id && data.bunny_video_id !== video.guid) {
+              throw new Error(`Lesson is already linked to Bunny video ${data.bunny_video_id}`);
+            }
+            const updateData: any = {
+              bunny_video_id: video.guid,
+              video_guid: video.guid,
+              bunny_url: video.videoUrl || getStreamUrl(video.guid),
+              thumbnail_url: video.thumbnailUrl || getThumbnailUrl(video.guid),
+              primary_thumbnail: video.thumbnailUrl || getThumbnailUrl(video.guid),
+              transcoding_status: video.status || 'pending',
+            };
+            if (video.previewUrl) updateData.preview_url = video.previewUrl;
+            if (video.description) updateData.description = video.description;
+            if (video.duration !== undefined) updateData.duration = video.duration;
+            if (video.collectionId) updateData.collection_id = video.collectionId;
+            if (video.encodeProgress !== undefined) updateData.encode_progress = video.encodeProgress;
+            if (video.views !== undefined) updateData.views = video.views;
+            if (video.dateUploaded) updateData.date_uploaded = new Date(video.dateUploaded);
+            await existingLesson.update(updateData);
+            return { lesson: await DB.Lessons.findByPk(data.id), created: false };
+          }
+        }
+
         // Step 3: Get or create topic
         const topic = await this.getOrCreateTopic(parsed.topicName, area.id);
         if (!topic) {
@@ -578,16 +762,27 @@ lesson = await DB.Lessons.findOne({ where, raw: true });
        }
        console.log(`  📌 subtopicId to pass: ${subtopicId}`);
 
+       const existingLesson = await DB.Lessons.findOne({
+         where: {
+           area_id: area.id,
+           topic_id: topic.topic_id,
+           subtopic_id: subtopicId ?? undefined,
+           is_active: true,
+         },
+         attributes: ['id'],
+         raw: true,
+       });
+
        // Step 5: Get or create lesson with full video metadata
        const lesson = await this.getOrCreateLesson(
-         video.title.replace('.mp4', ''),
+         parsed.subtopicName,
          area.id,
          topic.topic_id,
          subtopicId,
          video
        );
 
-       const created = !lesson.bunny_video_id;
+       const created = !existingLesson;
        return { lesson, created };
 } catch (error) {
         console.error(`  ❌ Error in findOrCreateLessonByHierarchy:`, error.message);
@@ -728,171 +923,331 @@ lesson = await DB.Lessons.findOne({ where, raw: true });
    * Reconcile all Bunny videos with local lessons
    */
    async reconcile(options: { dryRun?: boolean; force?: boolean } = {}): Promise<ReconciliationResult> {
-     const { dryRun = false, force = false } = options;
-
-     console.log('🔄 Starting Bunny → Lessons Reconciliation\n');
-     console.log('='.repeat(60));
-     console.log(`Mode: ${dryRun ? '🔍 DRY RUN' : '⚡ LIVE'}`);
-     console.log(`Force: ${force ? 'Yes' : 'No'}`);
-     console.log('');
-
-     const result: ReconciliationResult = {
+    const { dryRun = false } = options;
+    const result: ReconciliationResult = {
+      dryRun,
       totalVideos: 0,
       linked: 0,
       skipped: 0,
       failed: 0,
-      details: []
+      details: [],
     };
 
-    try {
-      // Fetch all Bunny collections
-      console.log('📦 Fetching Bunny collections...');
-      const collectionsResponse = await bunnyService.getStreamCollections();
-      const collections = collectionsResponse.items || collectionsResponse.collections || [];
+    const [collectionsResponse, lessons] = await Promise.all([
+      bunnyService.getStreamCollections(),
+      DB.Lessons.findAll({
+        attributes: ['id', 'title', 'bunny_video_id', 'area_id', 'topic_id', 'subtopic_id', 'is_active'],
+        include: [
+          {
+            model: DB.LearningAreas,
+            as: 'learning_area',
+            attributes: ['id', 'name', 'grade_id'],
+            include: [{
+              model: DB.Grades,
+              as: 'grade_info',
+              attributes: ['id', 'name'],
+            }],
+          },
+          { model: DB.Topics, as: 'topic', attributes: ['topic_id', 'name'] },
+          { model: DB.Subtopics, as: 'subtopic', attributes: ['subtopic_id', 'name'] },
+        ],
+      }),
+    ]);
+    const collections = collectionsResponse.items || collectionsResponse.collections || [];
+    const collectionNames = new Map(collections.map((collection: any) => [collection.guid, collection.name]));
+    const lessonRows = lessons.map((lesson: any) => lesson.toJSON());
+    const linkedLessonByVideoId = new Map<string, any>();
+    for (const lesson of lessonRows) {
+      if (lesson.bunny_video_id) linkedLessonByVideoId.set(lesson.bunny_video_id, lesson);
+    }
 
-      console.log(`   Found ${collections.length} collections\n`);
+    const videos = await getAllStreamVideos();
 
-      // Process each collection
-      for (const collection of collections) {
-        console.log(`📁 Collection: ${collection.name} (ID: ${collection.guid})`);
+    const plans: Array<{
+      video: BunnyVideo;
+      collectionName: string;
+      lesson?: any;
+      message: string;
+      status: 'linked' | 'skipped' | 'not_found' | 'error';
+    }> = [];
+    const proposedLessonCounts = new Map<number, number>();
 
-         // Fetch videos (paginated)
-         const collectionVideos: BunnyVideo[] = [];
-         let page = 1;
-         let hasMore = true;
+    for (const video of videos) {
+      result.totalVideos++;
+      const collectionName = collectionNames.get(video.collectionId || '') || '';
+      const alreadyLinked = linkedLessonByVideoId.get(video.guid);
+      if (alreadyLinked) {
+        plans.push({
+          video,
+          collectionName,
+          lesson: alreadyLinked,
+          message: `Already linked to lesson #${alreadyLinked.id}`,
+          status: 'skipped',
+        });
+        continue;
+      }
 
-         while (hasMore) {
-           try {
-             const response = await bunnyService.getStreamVideos(page, 100);
-             const pageVideos = (response.items || response.videos || []).filter((v: any) =>
-               v.collectionId === collection.guid
-             );
+      const parsed = strictParseVideoTitle(video.title);
+      if (!parsed) {
+        plans.push({
+          video,
+          collectionName,
+          message: 'Title does not match a supported grade / learning-area / topic format',
+          status: 'not_found',
+        });
+        continue;
+      }
 
-collectionVideos.push(...pageVideos.map((v: any) => ({
-                guid: v.guid,
-                title: v.title,
-                collectionId: v.collectionId,
-                status: mapStatus(v.status),
-                videoUrl: getStreamUrl(v.guid),
-                thumbnailUrl: getThumbnailUrl(v.guid),
-               previewUrl: v.previewUrl,
-               description: v.description,
-               duration: v.length || v.duration || 0,
-               encodeProgress: v.encodeProgress,
-               views: v.views,
-               dateUploaded: v.dateUploaded,
-               storageSize: v.storageSize,
-             })));
+      const gradeKey = normalizeMatchName(parsed.gradeName);
+        const gradeCandidates = lessonRows.filter((lesson: any) =>
+          lesson.is_active &&
+          normalizeMatchName(lesson.learning_area?.grade_info?.name || '') === gradeKey
+        );
 
-             hasMore = page < (response.totalPages || 1);
-             page++;
-           } catch (err) {
-             console.error(`  ⚠️  Error fetching page ${page}:`, err.message);
-             break;
-           }
-         }
+      const areaCandidates = new Map<number, { name: string; score: number }>();
+      for (const lesson of gradeCandidates) {
+        const area = lesson.learning_area;
+        if (!area) continue;
+        const score = nameSimilarity(
+          normalizeLearningAreaName(parsed.areaName),
+          normalizeLearningAreaName(area.name || '')
+        );
+        const previous = areaCandidates.get(area.id);
+        if (!previous || score > previous.score) {
+          areaCandidates.set(area.id, { name: area.name, score });
+        }
+      }
+      const rankedAreas = [...areaCandidates.entries()]
+        .map(([id, candidate]) => ({ id, ...candidate }))
+        .sort((left, right) => right.score - left.score);
+      const bestArea = rankedAreas[0];
+      if (!bestArea || bestArea.score < 0.8) {
+        plans.push({
+          video,
+          collectionName,
+          message: `No confident learning-area match for "${parsed.areaName}" under "${parsed.gradeName}"`,
+          status: 'not_found',
+        });
+        continue;
+      }
+      if (rankedAreas[1] && bestArea.score - rankedAreas[1].score < 0.08) {
+        plans.push({
+          video,
+          collectionName,
+          message: `Learning-area match is ambiguous: ${rankedAreas.slice(0, 2).map((area) => area.name).join(' / ')}`,
+          status: 'skipped',
+        });
+        continue;
+      }
 
-        console.log(`   📹 ${collectionVideos.length} videos`);
+      const targetName = normalizeMatchName(parsed.subtopicName);
+      const possibleLessons = gradeCandidates.filter((lesson: any) => {
+        if (lesson.area_id !== bestArea.id) return false;
+        if (parsed.topicName && normalizeMatchName(lesson.topic?.name || '') !== normalizeMatchName(parsed.topicName)) {
+          return false;
+        }
+        return normalizeMatchName(lesson.subtopic?.name || '') === targetName ||
+          normalizeMatchName(lesson.title || '') === targetName;
+      });
+      if (possibleLessons.length === 0) {
+        plans.push({
+          video,
+          collectionName,
+          message: `No existing lesson matches "${parsed.subtopicName}" under ${bestArea.name}`,
+          status: 'not_found',
+        });
+        continue;
+      }
+      if (possibleLessons.length > 1) {
+        plans.push({
+          video,
+          collectionName,
+          message: `More than one existing lesson matches "${parsed.subtopicName}"`,
+          status: 'skipped',
+        });
+        continue;
+      }
 
-        // Process each video
-        for (const video of collectionVideos) {
-          result.totalVideos++;
+      const lesson = possibleLessons[0];
+      if (lesson.bunny_video_id && lesson.bunny_video_id !== video.guid) {
+        plans.push({
+          video,
+          collectionName,
+          lesson,
+          message: `Lesson is already linked to Bunny video ${lesson.bunny_video_id}`,
+          status: 'skipped',
+        });
+        continue;
+      }
 
-          try {
-            // Parse title
-            const parsed = await this.parseVideoTitle(video.title, collection.name);
-            if (!parsed) {
-              result.skipped++;
-              result.details.push({
-                videoId: video.guid,
-                videoTitle: video.title,
-                collectionName: collection.name,
-                status: 'skipped',
-                message: 'Could not parse title'
-              });
-              continue;
-            }
+      proposedLessonCounts.set(lesson.id, (proposedLessonCounts.get(lesson.id) || 0) + 1);
+      plans.push({
+        video,
+        collectionName,
+        lesson,
+        message: dryRun ? 'Unambiguous existing lesson match; would link' : 'Unambiguous existing lesson match',
+        status: 'linked',
+      });
+    }
 
-            // Find or create matching lesson
-            const match = await this.findOrCreateLessonByHierarchy(parsed, video);
+    for (const plan of plans) {
+      if (plan.status === 'linked' && plan.lesson && (proposedLessonCounts.get(plan.lesson.id) || 0) > 1) {
+        plan.status = 'skipped';
+        plan.message = 'Multiple Bunny videos match this lesson; no video was linked';
+      }
+    }
 
-            const { lesson } = match;
-
-            // Check if already linked
-            if (lesson.bunny_video_id && !force) {
-              result.skipped++;
-              result.details.push({
-                videoId: video.guid,
-                videoTitle: video.title,
-                collectionName: collection.name,
-                lessonId: lesson.id,
-                lessonTitle: lesson.title,
-                status: 'skipped',
-                message: `Already linked to ${lesson.bunny_video_id}`
-              });
-              continue;
-            }
-
-            if (dryRun) {
-              result.linked++;
-              result.details.push({
-                videoId: video.guid,
-                videoTitle: video.title,
-                collectionName: collection.name,
-                lessonId: lesson.id,
-                lessonTitle: lesson.title,
-                status: 'linked',
-                message: 'Would link (dry-run)'
-              });
-             } else {
-               // Update lesson - link the Bunny video ID (metadata already set)
-               await DB.Lessons.update(
-                 { bunny_video_id: video.guid },
-                 { where: { id: lesson.id } }
-               );
-
-               result.linked++;
-               result.details.push({
-                 videoId: video.guid,
-                 videoTitle: video.title,
-                 collectionName: collection.name,
-                 lessonId: lesson.id,
-                 lessonTitle: lesson.title,
-                 status: 'linked',
-                 message: 'Linked successfully'
-               });
-             }
-          } catch (error: any) {
-            result.failed++;
-            result.details.push({
-              videoId: video.guid,
-              videoTitle: video.title,
-              collectionName: collection.name,
-              status: 'error',
-              message: error.message
-            });
+    for (const plan of plans) {
+      if (plan.status === 'linked' && plan.lesson && !dryRun) {
+        const transaction = await DB.Lessons.sequelize.transaction();
+        try {
+          const currentLesson = await DB.Lessons.findByPk(plan.lesson.id, {
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+          });
+          const duplicateLink = await DB.Lessons.findOne({
+            where: {
+              bunny_video_id: plan.video.guid,
+              id: { [DB.op.ne]: plan.lesson.id },
+            },
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+          });
+          if (!currentLesson || duplicateLink || currentLesson.bunny_video_id) {
+            await transaction.rollback();
+            plan.status = 'skipped';
+            plan.message = duplicateLink
+              ? `Bunny video is already linked to lesson #${duplicateLink.id}`
+              : 'Lesson was linked or changed while reconciliation was running';
+          } else {
+            await currentLesson.update({
+              bunny_video_id: plan.video.guid,
+              video_guid: plan.video.guid,
+              bunny_url: plan.video.videoUrl || getStreamUrl(plan.video.guid),
+              thumbnail_url: plan.video.thumbnailUrl || getThumbnailUrl(plan.video.guid),
+              transcoding_status: plan.video.status || 'pending',
+            }, { transaction });
+            await transaction.commit();
+            plan.message = 'Linked to existing lesson';
           }
+        } catch (error) {
+          await transaction.rollback();
+          plan.status = 'error';
+          plan.message = error instanceof Error ? error.message : String(error);
         }
       }
 
-      console.log('');
-      console.log('='.repeat(60));
-      console.log('📊 RECONCILIATION SUMMARY\n');
-      console.log(`   Total videos: ${result.totalVideos}`);
-      console.log(`   ✅ Linked: ${result.linked}`);
-      console.log(`   ⏭️  Skipped: ${result.skipped}`);
-      console.log(`   ❌ Failed: ${result.failed}`);
-      console.log('');
-      console.log(dryRun
-        ? '🔍 DRY RUN complete. Use "node bunnyLessonsRecon.ts" to apply.'
-        : '⚡ Reconciliation complete.');
+      if (plan.status === 'linked') result.linked++;
+      else if (plan.status === 'not_found' || plan.status === 'error') result.failed++;
+      else result.skipped++;
 
-      return result;
-
-    } catch (error: any) {
-      console.error('❌ Fatal error:', error.message);
-      throw error;
+      result.details.push({
+        videoId: plan.video.guid,
+        videoTitle: plan.video.title,
+        collectionName: plan.collectionName,
+        lessonId: plan.lesson?.id,
+        lessonTitle: plan.lesson?.title,
+        status: plan.status,
+        message: plan.message,
+      });
     }
+
+    return result;
+  }
+
+  /**
+   * Fetch Bunny videos and create/link lessons from their parsed learning hierarchy.
+   */
+  async mapAllVideosToLessons(): Promise<ReconciliationResult> {
+    const result: ReconciliationResult = {
+      dryRun: false,
+      totalVideos: 0,
+      linked: 0,
+      skipped: 0,
+      failed: 0,
+      details: [],
+    };
+
+    const [collectionsResponse, linkedLessons] = await Promise.all([
+      bunnyService.getStreamCollections(),
+      DB.Lessons.findAll({
+        attributes: ['id', 'title', 'bunny_video_id'],
+        where: { bunny_video_id: { [DB.op.not]: null, [DB.op.ne]: '' } },
+        raw: true,
+      }),
+    ]);
+    const collections = collectionsResponse.items || collectionsResponse.collections || [];
+    const collectionNames = new Map<string, string>(
+      collections.map((collection: any) => [collection.guid, collection.name])
+    );
+    const linkedLessonByVideoId = new Map<string, any>(
+      linkedLessons
+        .filter((lesson: any) => lesson.bunny_video_id)
+        .map((lesson: any) => [lesson.bunny_video_id, lesson])
+    );
+
+    const videos = await getAllStreamVideos();
+
+    for (const video of videos) {
+      result.totalVideos++;
+      const collectionName = collectionNames.get(video.collectionId || '') || '';
+      const existingLink = linkedLessonByVideoId.get(video.guid);
+      if (existingLink) {
+        result.skipped++;
+        result.details.push({
+          videoId: video.guid,
+          videoTitle: video.title,
+          collectionName,
+          lessonId: existingLink.id,
+          lessonTitle: existingLink.title,
+          status: 'skipped',
+          message: `Already linked to lesson #${existingLink.id}`,
+        });
+        continue;
+      }
+
+      const parsed = strictParseVideoTitle(video.title);
+      if (!parsed) {
+        result.failed++;
+        result.details.push({
+          videoId: video.guid,
+          videoTitle: video.title,
+          collectionName,
+          status: 'not_found',
+          message: 'Title does not match a supported grade / learning-area / topic format',
+        });
+        continue;
+      }
+
+      try {
+        const { lesson, created } = await this.findOrCreateLessonByHierarchy(parsed, video);
+        linkedLessonByVideoId.set(video.guid, lesson);
+        result.linked++;
+        result.details.push({
+          videoId: video.guid,
+          videoTitle: video.title,
+          collectionName,
+          lessonId: lesson.id,
+          lessonTitle: lesson.title,
+          status: 'linked',
+          message: created ? 'Created lesson and linked Bunny video' : 'Linked Bunny video to existing lesson',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isConflict = message.startsWith('Lesson is already linked to Bunny video ');
+        if (isConflict) result.skipped++;
+        else result.failed++;
+        result.details.push({
+          videoId: video.guid,
+          videoTitle: video.title,
+          collectionName,
+          status: isConflict ? 'skipped' : 'error',
+          message,
+        });
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -920,7 +1275,7 @@ collectionVideos.push(...pageVideos.map((v: any) => ({
 
        // Get all lessons with bunny_video_id
        const lessons = await DB.Lessons.findAll({
-         where: { bunny_video_id: { [DB.Op.not]: null } },
+         where: { bunny_video_id: { [DB.op.not]: null } },
          attributes: ['id', 'bunny_video_id'],
          raw: true
        });
@@ -994,7 +1349,7 @@ collectionVideos.push(...pageVideos.map((v: any) => ({
     try {
       // Get all lessons with bunny_video_id
       const lessonsWithVideos = await DB.Lessons.findAll({
-        where: { bunny_video_id: { [DB.Op.not]: null } },
+        where: { bunny_video_id: { [DB.op.not]: null } },
         attributes: ['id', 'title', 'bunny_video_id', 'transcoding_status'],
         raw: true
       });

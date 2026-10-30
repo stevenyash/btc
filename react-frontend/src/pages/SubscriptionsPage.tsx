@@ -39,7 +39,8 @@ const faqs = [
      subscriptionPlans,
      isLoading,
      error,
-     fetchSubscriptionPlans
+     fetchSubscriptionPlans,
+     fetchSubscriberDetails
    } = useSubscriptionStore()
    const { reset: resetMpesa } = useMpesaStore()
    const { user } = useAuthStore()
@@ -84,12 +85,15 @@ const faqs = [
       }
     }
 
-   const handlePaymentSuccess = () => {
+   const handlePaymentSuccess = async () => {
      setShowPayment(false)
      setSelectedPlan(null)
      setGuestFormStep(false)
      setGuestDetails({ email: "", phone: "", name: "" })
      resetMpesa()
+     if (user) {
+       await fetchSubscriberDetails()
+     }
      navigate("/dashboard")
    }
 
@@ -359,7 +363,6 @@ const faqs = [
                     name: user?.username || guestDetails.name,
                     referralCode: guestDetails.referralCode || subscriptionReferralCode || getReferralCode() || undefined,
                   }}
-                  skipActivation={true}
                   readonlyPhone={!user}
                   onSuccess={(transaction) => {
                     console.log("Payment successful:", transaction)

@@ -2,19 +2,22 @@ import type { RefObject } from "react";
 
 interface VideoContainerProps {
   videoRef: RefObject<HTMLVideoElement | null>;
+  title: string;
+  poster?: string | null;
 }
 
-export function VideoContainer({ videoRef }: VideoContainerProps) {
+export function VideoContainer({ videoRef, title, poster }: VideoContainerProps) {
   return (
-    <div className="aspect-video bg-black max-w-5xl mx-auto">
+    <div className="aspect-video overflow-hidden rounded-xl bg-black">
       <video
         ref={videoRef}
-        className="w-full h-full"
+        className="h-full w-full object-contain"
+        aria-label={`Lesson video: ${title}`}
         controls
-        controlsList="nodownload nofullscreen"
-        disablePictureInPicture
+        controlsList="nodownload"
         playsInline
-        autoPlay
+        preload="none"
+        poster={poster || undefined}
       />
     </div>
   );

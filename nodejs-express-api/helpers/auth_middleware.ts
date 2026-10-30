@@ -9,7 +9,7 @@ import passportLogin from './passport-auth.js';
     'components_data', 'home',
     'services', 'products', 'subscribe', 'viewlessons', 'guide', 'customlogin',
     'subscriptionshow', 'buypackages', 'guestlessons', 'guestclass', 'guestwatching',
-    'weekendtutorials', 'oauthcallback', 'aboutus', 'contactus', 'newslettersubscribers/add',
+    'weekendtutorials', 'oauthcallback', 'aboutus', 'contactus', 'support-tickets', 'newslettersubscribers/add',
     'questions/add', 'transactions/add', 'users/subscribeuser', 'tutorialssettings',
     'learningareas/index', 'grades/index', 'lessons/index', 'topics/index', 'subtopics/index',
     'learninglevels/index', 'lessons/stream-url',
@@ -17,14 +17,14 @@ import passportLogin from './passport-auth.js';
     'userprivileges/edit', 'userprivileges/delete', 'users/index', 'users/view',
     'components_data/guest_lesson_status', 'components_data/guest_lessons_status',
     'components_data/guest_initiate_payment', 'components_data/guest_payment_callback',
-    'components_data/guest_purchase_lesson', 'components_data/guest_update_watch_time',
+    'components_data/guest_update_watch_time',
     'components_data/verify_phone', 'components_data/lesson_fees',
     'components_data/learninglevels', 'components_data/grades_by_level',
     'components_data/learningareas', 'components_data/lessons',
     'invites', 'invites/index',
     'hls/manifest', 'hls/stream', // Public access for HLS endpoints (token-based auth)
     'migration', // Migration admin endpoints
-    'mpesa/push', 'mpesa/verify', 'mpesa/callback', 'mpesa/b2c_callback', 'mpesa/manualactivate', // Payment endpoints - public for M-Pesa
+    'mpesa/push', 'mpesa/verify', 'mpesa/guest-session', 'mpesa/callback', 'mpesa/b2c_callback', // Payment endpoints - public for M-Pesa
   ];
 
 interface CustomRequest extends Request {
@@ -148,5 +148,3 @@ export async function authMiddleware(req: CustomRequest, res: Response & { forbi
     return res.serverError(err);
   }
 }
-
-

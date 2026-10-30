@@ -2,6 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useRole } from '@/hooks/useRole';
 import { bunnyUploadService } from '@/services/bunny-upload';
+import { bunnySyncService } from '@/services/bunny-sync';
+import { adminService } from '@/services/admin';
+import type { FilenameBatchLink } from '@/types/bunny-sync';
 import {
   Loader2,
   HardDrive,
@@ -9,7 +12,10 @@ import {
   Video,
   Link,
   Unlink,
+  RefreshCw,
+  ListChecks,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
@@ -21,6 +27,7 @@ import {
   MappingStatusModal,
   SyncedLessonsModal,
   MultiUploadModal,
+  BatchFilenameLinkModal,
   getTranscodingBadge,
   getSyncStatusBadge,
 } from '@/components/BunnyVideo';
@@ -43,7 +50,6 @@ const BunnySyncAdminPage = () => {
     mappingSummary,
     mappingLoading,
     fetchMappingData,
-    linkVideoToLesson,
 
     // Synced lessons
     syncedLessons,
@@ -62,13 +68,11 @@ const BunnySyncAdminPage = () => {
     areas,
     topics,
     subtopics,
-    filteredLessons,
     fetchLevels,
     fetchGradesByLevel,
     fetchAreasByGrade,
     fetchTopicsByArea,
     fetchSubtopicsByTopic,
-    fetchFilteredLessons,
 
     // Selections
     selectedLevelId,
@@ -76,14 +80,12 @@ const BunnySyncAdminPage = () => {
     selectedAreaId,
     selectedTopicId,
     selectedSubtopicId,
-    selectedLessonId,
     selectedUnmappedVideo,
     setSelectedLevelId,
     setSelectedGradeId,
     setSelectedAreaId,
     setSelectedTopicId,
     setSelectedSubtopicId,
-    setSelectedLessonId,
     setSelectedUnmappedVideo,
   } = useBunnySyncStore();
 
@@ -94,10 +96,19 @@ const BunnySyncAdminPage = () => {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showCollectionsModal, setShowCollectionsModal] = useState(false);
   const [showMultiUploadModal, setShowMultiUploadModal] = useState(false);
+  const [showBatchFilenameLinkModal, setShowBatchFilenameLinkModal] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [linkModalVideoSearch, setLinkModalVideoSearch] = useState('');
+  const [isCreatingBunnyLesson, setIsCreatingBunnyLesson] = useState(false);
+  const [syncingLessonId, setSyncingLessonId] = useState<number | null>(null);
+  const [syncAllLoading, setSyncAllLoading] = useState(false);
+  const [filenameLinkCandidates, setFilenameLinkCandidates] = useState<
+    Awaited<ReturnType<typeof bunnySyncService.fetchFilenameLinkPreview>>
+  >([]);
+  const [filenamePreviewLoading, setFilenamePreviewLoading] = useState(false);
+  const [filenameBatchApplying, setFilenameBatchApplying] = useState(false);
 
   // Multi-upload state
   const [multiUploadHierarchy, setMultiUploadHierarchy] = useState({
@@ -153,14 +164,6 @@ const BunnySyncAdminPage = () => {
     }
   }, [selectedTopicId, fetchSubtopicsByTopic]);
 
-  useEffect(() => {
-    if (selectedAreaId) {
-      fetchFilteredLessons(selectedAreaId, selectedTopicId, selectedSubtopicId);
-    } else {
-      useBunnySyncStore.getState().filteredLessons = [];
-    }
-   }, [selectedAreaId, selectedTopicId, selectedSubtopicId, fetchFilteredLessons]);
-
    // Handlers
   const handleShowUnmapped = () => {
     fetchMappingData();
@@ -178,33 +181,163 @@ const BunnySyncAdminPage = () => {
     setShowCollectionsModal(true);
   };
 
-  const handleLinkBunnyVideo = async () => {
-    if (!selectedUnmappedVideo || !selectedLessonId) return;
-
+  const refreshFilenameLinkPreview = async () => {
+    setFilenamePreviewLoading(true);
     try {
-      await linkVideoToLesson(selectedUnmappedVideo.guid, selectedLessonId);
+      setFilenameLinkCandidates(await bunnySyncService.fetchFilenameLinkPreview());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load filename matches');
+    } finally {
+      setFilenamePreviewLoading(false);
+    }
+  };
 
-      // Step 2: Assign video to collection based on lesson hierarchy
+  const handleShowBatchFilenameLinkModal = async () => {
+    setShowBatchFilenameLinkModal(true);
+    await refreshFilenameLinkPreview();
+  };
+
+  const handleBatchFilenameLink = async (
+    links: FilenameBatchLink[]
+  ) => {
+    setFilenameBatchApplying(true);
+    try {
+      const linkedCount = await bunnySyncService.batchLinkVideos(links);
+      toast.success(`Linked ${linkedCount} Bunny video(s) to lessons`);
+      await Promise.all([fetchBunnyVideos(), fetchMappingData(), fetchStats()]);
+      setShowBatchFilenameLinkModal(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Batch linking failed');
+      await refreshFilenameLinkPreview();
+    } finally {
+      setFilenameBatchApplying(false);
+    }
+  };
+
+  const handleCreateArea = async (name: string): Promise<'created' | 'existing'> => {
+    if (!selectedGradeId) throw new Error('Select a grade before adding an area');
+
+    const existing = areas.find((area) => area.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setSelectedAreaId(existing.id);
+      return 'existing';
+    }
+
+    const created = await adminService.createLearningArea({
+      name,
+      grade_id: Number(selectedGradeId),
+      is_active: true,
+    });
+    await fetchAreasByGrade(Number(selectedGradeId));
+    const areaId = Number(created.id ?? created.area_id);
+    if (!Number.isInteger(areaId) || areaId <= 0) {
+      throw new Error('Area was created, but the API did not return its ID');
+    }
+    setSelectedAreaId(areaId);
+    return 'created';
+  };
+
+  const handleCreateTopic = async (name: string): Promise<'created' | 'existing'> => {
+    if (!selectedAreaId) throw new Error('Select a learning area before adding a topic');
+
+    const existing = topics.find((topic) => topic.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setSelectedTopicId(existing.topic_id);
+      return 'existing';
+    }
+
+    const created = await adminService.createTopic({
+      name,
+      area_id: Number(selectedAreaId),
+    });
+    await fetchTopicsByArea(Number(selectedAreaId));
+    const topicId = Number(created.topic_id ?? created.id);
+    if (!Number.isInteger(topicId) || topicId <= 0) {
+      throw new Error('Topic was created, but the API did not return its ID');
+    }
+    setSelectedTopicId(topicId);
+    return 'created';
+  };
+
+  const handleCreateSubtopic = async (name: string): Promise<'created' | 'existing'> => {
+    if (!selectedTopicId) throw new Error('Select a topic before adding a subtopic');
+
+    const existing = subtopics.find((subtopic) => subtopic.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setSelectedSubtopicId(existing.subtopic_id);
+      return 'existing';
+    }
+
+    const created = await adminService.createSubtopic({
+      name,
+      topic_id: Number(selectedTopicId),
+    });
+    await fetchSubtopicsByTopic(Number(selectedTopicId));
+    const subtopicId = Number(created.subtopic_id ?? created.id);
+    if (!Number.isInteger(subtopicId) || subtopicId <= 0) {
+      throw new Error('Subtopic was created, but the API did not return its ID');
+    }
+    setSelectedSubtopicId(subtopicId);
+    return 'created';
+  };
+
+  const handleSyncLesson = async (lessonId: number) => {
+    setSyncingLessonId(lessonId);
+    try {
+      await bunnySyncService.syncLesson(lessonId);
+      await Promise.all([fetchSyncedLessons(), fetchStats()]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lesson sync failed';
+      alert(`Lesson sync failed: ${message}`);
+      await Promise.all([fetchSyncedLessons(), fetchStats()]);
+    } finally {
+      setSyncingLessonId(null);
+    }
+  };
+
+  const handleSyncAllLessons = async () => {
+    setSyncAllLoading(true);
+    try {
+      const queuedCount = await bunnySyncService.syncAllLessons();
+      await fetchSyncedLessons();
+      setShowSyncedListModal(true);
+      alert(
+        queuedCount > 0
+          ? `Queued ${queuedCount} Bunny-linked lesson(s) for sync. Track their status in this list.`
+          : 'All Bunny-linked lessons are already synced or queued.'
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to queue Bunny lesson sync';
+      alert(message);
+    } finally {
+      setSyncAllLoading(false);
+    }
+  };
+
+  const handleLinkBunnyVideo = async () => {
+    if (!selectedUnmappedVideo || !selectedLevelId || !selectedGradeId || !selectedAreaId || !selectedTopicId) return;
+
+    setIsCreatingBunnyLesson(true);
+    try {
+      const lesson = await bunnySyncService.createLessonFromBunnyVideo({
+        bunnyVideoId: selectedUnmappedVideo.guid,
+        levelId: Number(selectedLevelId),
+        gradeId: Number(selectedGradeId),
+        areaId: Number(selectedAreaId),
+        topicId: Number(selectedTopicId),
+        ...(selectedSubtopicId ? { subtopicId: Number(selectedSubtopicId) } : {}),
+      });
+
       try {
-        const currentVideo = bunnyVideos.find(v => v.guid === selectedUnmappedVideo.guid);
-        if (currentVideo?.mappedLesson) {
-          throw new Error(`This Bunny video is already linked to lesson "${currentVideo.mappedLesson.title}". Please select an unmapped video.`);
-        }
-
         await fetchCollections();
-
-        const filtered = filteredLessons;
-        const lesson = filtered.find(l => l.id === selectedLessonId);
 
         if (lesson) {
           const collectionName = `${lesson.level} / ${lesson.area} / ${lesson.topic}`;
-
-          let collection = collections.find((c: any) => c.name === collectionName);
+          let collection = useBunnySyncStore.getState().collections.find((item) => item.name === collectionName);
 
           if (!collection) {
             const created = await createCollection(collectionName);
             collection = created;
-            await fetchCollections();
           }
 
           if (collection) {
@@ -219,22 +352,24 @@ const BunnySyncAdminPage = () => {
         console.error('Error handling collection assignment:', collectionErr);
       }
 
-      alert('Video linked successfully!');
+      alert('Lesson created and video linked successfully!');
       setShowLinkModal(false);
       setSelectedUnmappedVideo(null);
-      setSelectedLessonId('');
       setLinkModalVideoSearch('');
       setSelectedLevelId('');
       setSelectedGradeId('');
       setSelectedAreaId('');
       setSelectedTopicId('');
       setSelectedSubtopicId('');
+      fetchBunnyVideos();
       fetchMappingData();
       fetchStats();
       fetchCollections();
     } catch (error: any) {
       console.error('Link error:', error);
       alert('Failed to link video: ' + error.message);
+    } finally {
+      setIsCreatingBunnyLesson(false);
     }
   };
 
@@ -404,6 +539,19 @@ const BunnySyncAdminPage = () => {
             <div className="flex gap-2 flex-wrap">
               <Button
                 variant="secondary"
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+                onClick={handleSyncAllLessons}
+                disabled={syncAllLoading}
+              >
+                {syncAllLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                {syncAllLoading ? 'Queueing Sync...' : 'Sync Linked Videos'}
+              </Button>
+              <Button
+                variant="secondary"
                 className="bg-purple-500 hover:bg-purple-600 text-white"
                 onClick={() => {
                   fetchBunnyVideos();
@@ -428,6 +576,19 @@ const BunnySyncAdminPage = () => {
               >
                 <Link className="mr-2 h-4 w-4" />
                 Link Unlinked Videos
+              </Button>
+              <Button
+                variant="secondary"
+                className="bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={() => void handleShowBatchFilenameLinkModal()}
+                disabled={filenamePreviewLoading}
+              >
+                {filenamePreviewLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ListChecks className="mr-2 h-4 w-4" />
+                )}
+                Batch Link from Filenames
               </Button>
               <Button
                 variant="secondary"
@@ -615,6 +776,8 @@ const BunnySyncAdminPage = () => {
         searchQuery={searchQuery}
         filterStatus={filterStatus}
         getSyncStatusBadge={getSyncStatusBadge}
+        onSyncLesson={handleSyncLesson}
+        syncingLessonId={syncingLessonId}
       />
 
       {/* Bunny Videos Modal */}
@@ -642,7 +805,6 @@ const BunnySyncAdminPage = () => {
         onClose={() => {
           setShowLinkModal(false);
           setSelectedUnmappedVideo(null);
-          setSelectedLessonId('');
           setLinkModalVideoSearch('');
           setSelectedLevelId('');
           setSelectedGradeId('');
@@ -655,8 +817,6 @@ const BunnySyncAdminPage = () => {
         onVideoSelect={setSelectedUnmappedVideo}
         linkModalVideoSearch={linkModalVideoSearch}
         onLinkModalVideoSearchChange={setLinkModalVideoSearch}
-        selectedLessonId={selectedLessonId}
-        onLessonSelect={setSelectedLessonId}
         levels={levels}
         grades={grades}
         areas={areas}
@@ -672,10 +832,22 @@ const BunnySyncAdminPage = () => {
         onAreaChange={setSelectedAreaId}
         onTopicChange={setSelectedTopicId}
         onSubtopicChange={setSelectedSubtopicId}
-        filteredLessons={filteredLessons}
+        onCreateArea={handleCreateArea}
+        onCreateTopic={handleCreateTopic}
+        onCreateSubtopic={handleCreateSubtopic}
         onLink={handleLinkBunnyVideo}
-        isLinking={false}
+        isLinking={isCreatingBunnyLesson}
         getTranscodingBadge={getTranscodingBadge}
+      />
+
+      <BatchFilenameLinkModal
+        isOpen={showBatchFilenameLinkModal}
+        onClose={() => setShowBatchFilenameLinkModal(false)}
+        candidates={filenameLinkCandidates}
+        isLoading={filenamePreviewLoading}
+        isApplying={filenameBatchApplying}
+        onRefresh={refreshFilenameLinkPreview}
+        onApply={handleBatchFilenameLink}
       />
 
       {/* Collections Modal */}

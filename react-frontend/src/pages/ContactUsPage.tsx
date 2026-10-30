@@ -1,4 +1,7 @@
+import { useState } from "react"
+import type { FormEvent } from "react"
 import { Link } from "react-router-dom"
+import { isAxiosError } from "axios"
 import { 
   Phone, 
   Mail, 
@@ -13,8 +16,78 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Layout from "@/components/Layout"
+import { useAuthStore } from "@/stores/useAuthStore"
+import {
+  supportService,
+  type CreatedSupportTicket,
+  type SupportTicketCategory,
+  type TrackedSupportTicket,
+} from "@/services/support"
+
+const blankForm = {
+  name: "",
+  email: "",
+  phone: "",
+  paymentReference: "",
+  category: "lesson_access" as SupportTicketCategory,
+  subject: "",
+  description: "",
+}
 
 export default function ContactUsPage() {
+  const { user, isAuthenticated } = useAuthStore()
+  const [form, setForm] = useState(() => ({
+    ...blankForm,
+    name: user?.username || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+  }))
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [createdTicket, setCreatedTicket] = useState<CreatedSupportTicket | null>(null)
+  const [trackingCode, setTrackingCode] = useState("")
+  const [trackedTicket, setTrackedTicket] = useState<TrackedSupportTicket | null>(null)
+  const [submitError, setSubmitError] = useState("")
+  const [trackError, setTrackError] = useState("")
+  const [isTracking, setIsTracking] = useState(false)
+
+  const updateForm = (field: keyof typeof blankForm, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setCreatedTicket(null)
+    setSubmitError("")
+    try {
+      const ticket = await supportService.submitTicket(form)
+      setCreatedTicket(ticket)
+      setTrackingCode(ticket.trackingCode)
+      setTrackedTicket(null)
+      setTrackError("")
+    } catch (error) {
+      const message = isAxiosError<{ error?: string }>(error) ? error.response?.data?.error : undefined
+      setSubmitError(message || "We couldn't submit your request. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleTrackTicket = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsTracking(true)
+    setTrackError("")
+    setTrackedTicket(null)
+    try {
+      setTrackedTicket(await supportService.trackTicket(trackingCode.trim()))
+    } catch (error) {
+      const message = isAxiosError<{ error?: string }>(error) ? error.response?.data?.error : undefined
+      setTrackError(message || "We couldn't find that support request. Check the tracking code.")
+    } finally {
+      setIsTracking(false)
+    }
+  }
+
   return (
     <Layout>
       {/* Hero Section */}
@@ -24,7 +97,7 @@ export default function ContactUsPage() {
             Get In <span className="text-primary">Touch</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Have questions? We'd love to hear from you. Send us a message and we'll respond as soon as possible.
+          Need help with a payment or lesson? Send a support request and track its progress here.
           </p>
         </div>
       </section>
@@ -115,14 +188,18 @@ export default function ContactUsPage() {
             <div>
               <Card className="shadow-lg">
                 <CardContent className="p-6">
-                  <h2 className="text-2xl font-bold mb-6">Send Us a Message</h2>
-                  <form className="space-y-4">
+                  <h2 className="text-2xl font-bold mb-6">Report a Problem</h2>
+                  <form className="space-y-4" onSubmit={handleSubmit}>
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name</Label>
                       <Input
                         id="name"
                         type="text"
                         placeholder="John Doe"
+                        required
+                        maxLength={100}
+                        value={form.name}
+                        onChange={(event) => updateForm("name", event.target.value)}
                       />
                     </div>
 
@@ -132,15 +209,53 @@ export default function ContactUsPage() {
                         id="email"
                         type="email"
                         placeholder="john@example.com"
+                        required
+                        maxLength={255}
+                        value={form.email}
+                        onChange={(event) => updateForm("email", event.target.value)}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number (Optional)</Label>
+                      <Label htmlFor="phone">Phone Number</Label>
                       <Input
                         id="phone"
                         type="tel"
                         placeholder="+254 700 000 000"
+                        required
+                        maxLength={20}
+                        value={form.phone}
+                        onChange={(event) => updateForm("phone", event.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Issue Type</Label>
+                      <select
+                        id="category"
+                        className="w-full px-3 py-2 border rounded-md bg-background"
+                        value={form.category}
+                        onChange={(event) => updateForm("category", event.target.value)}
+                      >
+                        <option value="lesson_access">Paid but cannot view a lesson</option>
+                        <option value="payment">Payment or M-Pesa issue</option>
+                        <option value="account">Account issue</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="paymentReference">
+                        M-Pesa receipt or checkout reference{!isAuthenticated ? " (required for guests)" : ""}
+                      </Label>
+                      <Input
+                        id="paymentReference"
+                        type="text"
+                        placeholder="e.g. QWE1234567"
+                        required={!isAuthenticated}
+                        maxLength={100}
+                        value={form.paymentReference}
+                        onChange={(event) => updateForm("paymentReference", event.target.value)}
                       />
                     </div>
 
@@ -150,6 +265,11 @@ export default function ContactUsPage() {
                         id="subject"
                         type="text"
                         placeholder="How can we help?"
+                        required
+                        minLength={5}
+                        maxLength={150}
+                        value={form.subject}
+                        onChange={(event) => updateForm("subject", event.target.value)}
                       />
                     </div>
 
@@ -159,14 +279,28 @@ export default function ContactUsPage() {
                         id="message"
                         className="w-full min-h-[150px] px-3 py-2 border rounded-md bg-background"
                         placeholder="Tell us more about your inquiry..."
+                        required
+                        minLength={10}
+                        maxLength={5000}
+                        value={form.description}
+                        onChange={(event) => updateForm("description", event.target.value)}
                       />
                     </div>
 
-                    <Button type="submit" className="w-full">
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
                       <Send className="mr-2 h-4 w-4" />
-                      Send Message
+                      {isSubmitting ? "Submitting..." : "Submit Support Request"}
                     </Button>
                   </form>
+
+                  {submitError && <p role="alert" className="mt-4 text-sm text-red-600">{submitError}</p>}
+                  {createdTicket && (
+                    <div className="mt-4 rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-900">
+                      <p className="font-semibold">Request submitted: {createdTicket.reference}</p>
+                      <p>Save this private tracking code to check status or read our reply:</p>
+                      <p className="mt-2 break-all rounded bg-white p-2 font-mono">{createdTicket.trackingCode}</p>
+                    </div>
+                  )}
 
                   <p className="text-xs text-muted-foreground mt-4 text-center">
                     By sending this message, you agree to our{" "}
@@ -174,6 +308,40 @@ export default function ContactUsPage() {
                       Privacy Policy
                     </Link>
                   </p>
+                </CardContent>
+              </Card>
+
+              <Card className="mt-6">
+                <CardContent className="p-6">
+                  <h2 className="text-xl font-bold mb-2">Track a Support Request</h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Enter the private tracking code shown after submitting your request.
+                  </p>
+                  <form className="flex flex-col sm:flex-row gap-2" onSubmit={handleTrackTicket}>
+                    <Input
+                      aria-label="Support tracking code"
+                      placeholder="Paste your tracking code"
+                      value={trackingCode}
+                      onChange={(event) => setTrackingCode(event.target.value)}
+                      required
+                    />
+                    <Button type="submit" disabled={isTracking}>
+                      {isTracking ? "Checking..." : "Check status"}
+                    </Button>
+                  </form>
+                  {trackError && <p role="alert" className="mt-3 text-sm text-red-600">{trackError}</p>}
+                  {trackedTicket && (
+                    <div className="mt-4 rounded-md border p-4">
+                      <p className="font-semibold">{trackedTicket.reference}: {trackedTicket.subject}</p>
+                      <p className="mt-1 text-sm capitalize">Status: {trackedTicket.status.replace("_", " ")}</p>
+                      {trackedTicket.response && (
+                        <div className="mt-3 rounded bg-muted p-3">
+                          <p className="text-xs font-semibold uppercase text-muted-foreground">Response from support</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm">{trackedTicket.response}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Layout from "@/components/Layout";
 import { useGuestStore } from "@/stores/useGuestStore";
 import { useLessonSettingsStore } from "@/stores/useLessonSettingsStore";
-import { type Lesson } from "@/services/guest";
+import { guestService, type Lesson } from "@/services/guest";
 import {
   BookOpen,
   CheckCircle,
@@ -75,6 +75,9 @@ export default function GuestClassPage() {
     useGuestStore.getState().clearAll();
     setPhoneInput("");
     localStorage.removeItem("guest_phone");
+    void guestService.clearPaymentSession().catch((error) => {
+      console.error("Failed to clear guest session:", error);
+    });
   };
 
   const handleWatchLesson = (lesson: Lesson) => {
@@ -102,6 +105,16 @@ export default function GuestClassPage() {
   const handleCloseVideo = () => {
     setSelectedLesson(null);
   };
+
+  const handleWatchTimeSync = useCallback(async (watchTimeSeconds: number) => {
+    if (!phone || !selectedLesson) return;
+
+    try {
+      await guestService.updateWatchTime(phone, selectedLesson.id, watchTimeSeconds);
+    } catch (error) {
+      console.error("Failed to sync guest watch time:", error);
+    }
+  }, [phone, selectedLesson]);
 
   const getInitialMaxWatchTime = (lesson: Lesson): number => {
     if (phone && isVerified) {
@@ -132,6 +145,7 @@ export default function GuestClassPage() {
           phone={phone}
           initialMaxWatchTime={getInitialMaxWatchTime(selectedLesson)}
           onClose={handleCloseVideo}
+          onWatchTimeSync={handleWatchTimeSync}
         />
       )}
 

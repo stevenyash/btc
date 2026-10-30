@@ -63,18 +63,32 @@ publicApi.interceptors.response.use(
     const status = error.response?.status;
     const config = error.response?.config;
 
-    if (!error.response) {
+    if (!error.response && !axios.isCancel(error)) {
       console.error("Network error - no response:", error.message);
     } else if (status === 429) {
       const retryAfter = error.response?.headers?.['retry-after'];
       error.isRateLimit = true;
       error.retryAfter = retryAfter;
     } else if (status === 401) {
+      if (config?.url && (
+        config.url.includes('/components_data/guest_lessons_status') ||
+        config.url.includes('/components_data/guest_update_watch_time') ||
+        config.url.includes('/lessons/stream-url/') ||
+        config.url.includes('/mpesa/guest-session')
+      )) {
+        return Promise.reject(error);
+      }
       // Token is in httpOnly cookie, no need to remove from localStorage
       // Just redirect to login page
       window.location.href = "/login";
     } else if (status === 403) {
-      if (config?.url && config.url.includes('/lessons/stream-url/')) {
+      if (config?.url && (
+        config.url.includes('/lessons/stream-url/') ||
+        config.url.includes('/lessons/access/') ||
+        config.url.includes('/components_data/guest_lessons_status') ||
+        config.url.includes('/components_data/guest_update_watch_time') ||
+        config.url.includes('/mpesa/guest-session')
+      )) {
         return Promise.reject(error);
       }
       window.location.href = "/unauthorized";
@@ -92,7 +106,7 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const config = error.response?.config;
 
-    if (!error.response) {
+    if (!error.response && !axios.isCancel(error)) {
       console.error("Network error - no response:", error.message);
     } else if (status === 429) {
       const retryAfter = error.response?.headers?.['retry-after'];
@@ -101,7 +115,7 @@ api.interceptors.response.use(
     } else if (status === 401) {
       window.location.href = "/login";
     } else if (status === 403) {
-      if (config?.url && config.url.includes('/lessons/stream-url/')) {
+      if (config?.url && (config.url.includes('/lessons/stream-url/') || config.url.includes('/lessons/access/'))) {
         return Promise.reject(error);
       }
       window.location.href = "/unauthorized";

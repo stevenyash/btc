@@ -8,6 +8,7 @@ interface PackagesAttributes {
 	subscription_type_id: number;
 	concurrent_access: number;
 	no_of_lessons: number;
+	watch_time_minutes: number;
 	duration_amount: number;
 	duration_unit: string;
 	fee: number;
@@ -29,6 +30,7 @@ class Packages extends BaseModel<PackagesAttributes, PackagesCreationAttributes>
 				subscription_type_id: { type: DataTypes.INTEGER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				concurrent_access: { type: DataTypes.INTEGER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				no_of_lessons: { type: DataTypes.INTEGER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
+				watch_time_minutes: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 				duration_amount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				duration_unit: { type: DataTypes.STRING, allowNull: false, defaultValue: sequelize.literal('DEFAULT') as any },
 				fee: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: sequelize.literal('DEFAULT') }
@@ -42,15 +44,15 @@ class Packages extends BaseModel<PackagesAttributes, PackagesCreationAttributes>
 	}
 
 	static listFields(): string[] {
-		return ['id', 'subscription_type_id', 'name', 'description', 'concurrent_access', 'no_of_lessons', 'duration_amount', 'duration_unit', 'created_at', 'fee'];
+		return ['id', 'subscription_type_id', 'name', 'description', 'concurrent_access', 'no_of_lessons', 'watch_time_minutes', 'duration_amount', 'duration_unit', 'created_at', 'fee'];
 	}
 
 	static viewFields(): string[] {
-		return ['id', 'subscription_type_id', 'name', 'description', 'concurrent_access', 'created_at', 'no_of_lessons', 'duration_amount', 'duration_unit', 'fee'];
+		return ['id', 'subscription_type_id', 'name', 'description', 'concurrent_access', 'created_at', 'no_of_lessons', 'watch_time_minutes', 'duration_amount', 'duration_unit', 'fee'];
 	}
 
 	static editFields(): string[] {
-		return ['subscription_type_id', 'name', 'description', 'fee', 'concurrent_access', 'no_of_lessons', 'duration_amount', 'duration_unit', 'id'];
+		return ['subscription_type_id', 'name', 'description', 'fee', 'concurrent_access', 'no_of_lessons', 'watch_time_minutes', 'duration_amount', 'duration_unit', 'id'];
 	}
 
 	static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {
@@ -78,4 +80,3 @@ class Packages extends BaseModel<PackagesAttributes, PackagesCreationAttributes>
 Packages.initModel();
 
 export default Packages;
-

@@ -24,7 +24,7 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   moduleNameMapper: {
     '^(\\.[/\\\\].*)\\.(css|less|sass|scss)$': 'identity-obj-proxy',
-    '^(\\.[/\\\\].*)\\.js$': '$1',
+    '^(\\.{1,2}[/\\\\].*)\\.js$': '$1',
   },
   testTimeout: 30000,
   verbose: true

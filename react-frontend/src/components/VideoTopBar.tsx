@@ -39,7 +39,7 @@ export function VideoTopBar({
           <span className="text-sm">
             {formatTime(remainingTime)} remaining
             {isSubscriber && lessonBalance !== undefined
-              ? ` (${lessonBalance} credits)`
+              ? ` (${lessonBalance} lesson slots left)`
               : null}
           </span>
         </div>

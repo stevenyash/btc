@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback } from "react";
+import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import { useSubscriptionStore } from "@/stores/useSubscriptionStore";
 import { useLessonSettingsStore } from "@/stores/useLessonSettingsStore";
 import { type Lesson, guestService } from "@/services/guest";
 import { subscriptionService } from "@/services/subscription";
+import { api } from "@/services/api";
+import { getPlaybackDeviceId } from "@/services/playbackDevice";
 import {
   BookOpen,
   CheckCircle,
@@ -25,6 +28,7 @@ import {
 
 import useSelectionFlow from "@/hooks/useSelectionFlow";
 import VideoPlayer from "@/components/VideoPlayer";
+import { useRole } from "@/hooks/useRole";
 import LessonPurchaseModal from "@/components/LessonPurchaseModal";
 import PhoneVerificationCard from "@/components/PhoneVerificationCard";
 import PhoneVerificationModal from "@/components/PhoneVerificationModal";
@@ -40,6 +44,7 @@ export default function GoToClassPage() {
     lessonBalance,
     lessonsViewed,
     totalLessons,
+    remainingWatchTimeSeconds,
     hasActiveSubscription,
     fetchSubscriberDetails,
   } = useSubscriptionStore();
@@ -49,11 +54,13 @@ export default function GoToClassPage() {
     isVerified,
     purchaseStatuses,
   } = useGuestStore();
+  const { isAdmin } = useRole();
 
   const { settings: lessonFees, fetchSettings } = useLessonSettingsStore();
   const selectionHandlers = useSelectionFlow({ fetchLevels: true });
   const isSubscriber = isAuthenticated && hasActiveSubscription;
-  const isExhaustedSubscriber = isSubscriber && lessonBalance <= 0;
+  const isExhaustedSubscriber = isSubscriber &&
+    (lessonBalance <= 0 || remainingWatchTimeSeconds <= 0);
 
   useEffect(() => {
     if (isExhaustedSubscriber && user?.phone && selectionHandlers.lessons.length > 0) {
@@ -70,7 +77,9 @@ export default function GoToClassPage() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [selectedAccessMode, setSelectedAccessMode] = useState<"admin" | "subscription" | "individual" | "guest" | "preview" | null>(null);
   const [purchaseLesson, setPurchaseLesson] = useState<Lesson | null>(null);
+  const [purchaseAtSubscriberRate, setPurchaseAtSubscriberRate] = useState(false);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [pendingLesson, setPendingLesson] = useState<Lesson | null>(null);
@@ -90,6 +99,11 @@ export default function GoToClassPage() {
     setIsVerifying(true);
     setRegisterError(null);
     try {
+      const verified = await guestService.verifyPhone(phoneInput);
+      if (!verified) {
+        setRegisterError("This phone belongs to a registered user. Please sign in to continue.");
+        return;
+      }
       localStorage.setItem("guest_phone", phoneInput);
       useGuestStore.getState().setPhone(phoneInput);
       useGuestStore.getState().setVerified(true);
@@ -101,11 +115,21 @@ export default function GoToClassPage() {
 
       if (pendingLesson) {
         setShowPhoneModal(false);
-        const status = purchaseStatuses.get(pendingLesson.id);
+        let status: Awaited<ReturnType<typeof guestService.checkPurchaseStatus>> | null = null;
+        try {
+          status = await guestService.checkPurchaseStatus(phoneInput, pendingLesson.id);
+        } catch (error) {
+          const responseStatus = isAxiosError(error) ? error.response?.status : undefined;
+          if (responseStatus !== 401 && responseStatus !== 403) {
+            throw error;
+          }
+        }
         if (!status?.purchased) {
+          setPurchaseAtSubscriberRate(false);
           setPurchaseLesson(pendingLesson);
           setShowPurchaseModal(true);
         } else {
+          setSelectedAccessMode("guest");
           setSelectedLesson(pendingLesson);
         }
         setPendingLesson(null);
@@ -153,42 +177,73 @@ export default function GoToClassPage() {
     useGuestStore.getState().clearAll();
     setPhoneInput("");
     localStorage.removeItem("guest_phone");
+    void guestService.clearPaymentSession().catch((error) => {
+      console.error("Failed to clear guest session:", error);
+    });
   };
 
-   const handleWatchLesson = (lesson: Lesson) => {
-     if (isExhaustedSubscriber) {
-       const status = purchaseStatuses.get(lesson.id);
-       if (!status?.purchased) {
-         setPurchaseLesson(lesson);
-         setShowPurchaseModal(true);
-         return;
-       }
-       setSelectedLesson(lesson);
-       return;
-     }
+  const handleWatchLesson = async (lesson: Lesson) => {
+    if (isAuthenticated && isAdmin) {
+      try {
+        const response = await api.get(`/lessons/access/${lesson.id}`, {
+          params: {
+            check_only: "true",
+            device_id: getPlaybackDeviceId(),
+          },
+        });
+        setSelectedAccessMode(response.data.access_mode);
+        setSelectedLesson(lesson);
+      } catch (error: unknown) {
+        const data = (error as { response?: { data?: { error?: string } } })?.response?.data;
+        toast.error(data?.error || "Could not check lesson access. Please retry.");
+      }
+      return;
+    }
 
-     if (isAuthenticated && hasActiveSubscription) {
-       setSelectedLesson(lesson);
-       return;
-     }
+    if (isSubscriber) {
+      try {
+        const response = await api.get(`/lessons/access/${lesson.id}`, {
+          params: {
+            check_only: "true",
+            device_id: getPlaybackDeviceId(),
+          },
+        });
+        setSelectedAccessMode(response.data.access_mode);
+        setSelectedLesson(lesson);
+      } catch (error: unknown) {
+        const data = (error as { response?: { data?: { code?: string; error?: string } } })
+          ?.response?.data;
+        if (["DEVICE_LIMIT_REACHED", "LESSON_LIMIT_REACHED", "WATCH_TIME_EXHAUSTED", "INDIVIDUAL_PURCHASE_REQUIRED"].includes(data?.code || "")) {
+          setPurchaseAtSubscriberRate(true);
+          setPurchaseLesson(lesson);
+          setShowPurchaseModal(true);
+          return;
+        }
+        toast.error(data?.error || "Could not check lesson access. Please retry.");
+      }
+      return;
+    }
 
-     if (!phone || !isVerified) {
-       setPendingLesson(lesson);
-       setShowPhoneModal(true);
-       return;
-     }
-     const status = purchaseStatuses.get(lesson.id);
-     if (!status?.purchased) {
-       setPurchaseLesson(lesson);
-       setShowPurchaseModal(true);
-       return;
-     }
-     setSelectedLesson(lesson);
-   };
+    if (!phone || !isVerified) {
+      setPendingLesson(lesson);
+      setShowPhoneModal(true);
+      return;
+    }
+    const status = purchaseStatuses.get(lesson.id);
+    if (!status?.purchased) {
+      setPurchaseAtSubscriberRate(false);
+      setPurchaseLesson(lesson);
+      setShowPurchaseModal(true);
+      return;
+    }
+    setSelectedAccessMode("individual");
+    setSelectedLesson(lesson);
+  };
 
   const handlePurchaseComplete = () => {
     setShowPurchaseModal(false);
     if (purchaseLesson) {
+      setSelectedAccessMode("individual");
       setSelectedLesson(purchaseLesson);
       setPurchaseLesson(null);
     }
@@ -196,6 +251,7 @@ export default function GoToClassPage() {
 
   const handleCloseVideo = () => {
     setSelectedLesson(null);
+    setSelectedAccessMode(null);
   };
 
   const handleWatchTimeSync = useCallback(async (watchTimeSeconds: number) => {
@@ -205,47 +261,66 @@ export default function GoToClassPage() {
       const result = await subscriptionService.updateLessonBalance({
         lessonId: selectedLesson.id,
         watchTimeSeconds,
+        deviceId: getPlaybackDeviceId(),
       });
 
       if (result.success) {
         useSubscriptionStore.setState({
-          lessonBalance: result.new_balance,
+          lessonBalance: Math.max(0, result.total_lessons - result.lessons_used),
+          lessonsViewed: result.lessons_used,
+          remainingWatchTimeSeconds: result.remaining_watch_time_seconds,
         });
 
         if (result.exhausted) {
-          toast.info("Lesson credits exhausted. Please top up your subscription.");
+          toast.info("Your package watch-time allowance is exhausted. Buy this lesson or renew your subscription.");
           setSelectedLesson(null);
+          setSelectedAccessMode(null);
         }
       }
     } catch (error: any) {
       console.error("Failed to sync watch time:", error);
-      if (error.response?.data?.exhausted) {
-        toast.info("Lesson credits exhausted. Please top up your subscription.");
-        useSubscriptionStore.setState({ lessonBalance: 0 });
+      if (error.response?.data?.exhausted || error.response?.data?.code === "WATCH_TIME_EXHAUSTED") {
+        toast.info("Your package watch-time allowance is exhausted. Buy this lesson or renew your subscription.");
+        useSubscriptionStore.setState({ remainingWatchTimeSeconds: 0 });
         setSelectedLesson(null);
+        setSelectedAccessMode(null);
       }
     }
   }, [isSubscriber, selectedLesson]);
 
+  const handleGuestWatchTimeSync = useCallback(async (watchTimeSeconds: number) => {
+    const guestPhone = user?.phone || phone;
+    if (!guestPhone || !selectedLesson) return;
+
+    try {
+      await guestService.updateWatchTime(guestPhone, selectedLesson.id, watchTimeSeconds, getPlaybackDeviceId());
+    } catch (error) {
+      console.error("Failed to sync guest watch time:", error);
+    }
+  }, [user?.phone, phone, selectedLesson]);
+
   const getInitialMaxWatchTime = (lesson: Lesson): number => {
+    if (selectedAccessMode === "subscription") {
+      return remainingWatchTimeSeconds;
+    }
+    if (isSubscriber && selectedAccessMode === "individual") {
+      return (lessonFees?.subscribed.duration || 90) * 60;
+    }
     if (phone && isVerified) {
       const status = purchaseStatuses.get(lesson.id);
       if (status?.max_watch_time) {
         return status.max_watch_time;
       }
     }
-    if (isExhaustedSubscriber) {
-      const status = purchaseStatuses.get(lesson.id);
-      if (status?.purchased) {
-        return (lessonFees?.subscribed.duration || 90) * 60;
-      }
+    if (isSubscriber) {
+      return remainingWatchTimeSeconds;
     }
     return 0;
   };
 
   const getRemainingWatchTime = (): number => {
     if (!isAuthenticated || !hasActiveSubscription) return 0;
-    return lessonBalance * lessonFees!.subscribed.duration * 60;
+    return remainingWatchTimeSeconds;
   };
 
   if (!lessonFees) {
@@ -260,36 +335,29 @@ export default function GoToClassPage() {
 
   return (
     <Layout>
-      {isExhaustedSubscriber && selectedLesson && (
+      {selectedLesson && (selectedAccessMode === "subscription" || selectedAccessMode === "admin") && (
+        <VideoPlayer
+          lesson={selectedLesson}
+          isSubscriber={true}
+          phone={undefined}
+          userId={user?.id}
+          initialMaxWatchTime={selectedAccessMode === "admin" ? 0 : getRemainingWatchTime()}
+          lessonBalance={lessonBalance}
+          onClose={handleCloseVideo}
+          onWatchTimeSync={selectedAccessMode === "admin" ? undefined : handleWatchTimeSync}
+          usesSubscriberDeviceSession={selectedAccessMode !== "admin"}
+          unlimitedWatchTime={selectedAccessMode === "admin"}
+        />
+      )}
+
+      {selectedLesson && selectedAccessMode !== "subscription" && selectedAccessMode !== "admin" && (
         <VideoPlayer
           lesson={selectedLesson}
           isSubscriber={false}
           phone={user?.phone || phone}
           initialMaxWatchTime={getInitialMaxWatchTime(selectedLesson)}
           onClose={handleCloseVideo}
-        />
-      )}
-
-      {!isExhaustedSubscriber && isSubscriber && selectedLesson && (
-        <VideoPlayer
-          lesson={selectedLesson}
-          isSubscriber={true}
-          phone={undefined}
-          userId={user?.id}
-          initialMaxWatchTime={getRemainingWatchTime()}
-          lessonBalance={lessonBalance}
-          onClose={handleCloseVideo}
-          onWatchTimeSync={handleWatchTimeSync}
-        />
-      )}
-
-      {!isSubscriber && selectedLesson && (
-        <VideoPlayer
-          lesson={selectedLesson}
-          isSubscriber={false}
-          phone={phone}
-          initialMaxWatchTime={getInitialMaxWatchTime(selectedLesson)}
-          onClose={handleCloseVideo}
+          onWatchTimeSync={handleGuestWatchTimeSync}
         />
       )}
 
@@ -302,7 +370,7 @@ export default function GoToClassPage() {
         userPhone={user?.phone || null}
         lessonFees={lessonFees}
         onPurchaseComplete={handlePurchaseComplete}
-        isExhausted={isExhaustedSubscriber}
+        isExhausted={purchaseAtSubscriberRate}
       />
 
       <PhoneVerificationModal
@@ -324,11 +392,11 @@ export default function GoToClassPage() {
                   <h1 className="text-2xl md:text-3xl font-bold">Go To Class</h1>
                   {isExhaustedSubscriber ? (
                     <p className="text-orange-600 mt-1 text-sm md:text-base font-medium">
-                      Your subscription credits are exhausted.
+                      A package allowance is exhausted. You can still resume eligible lessons or buy another lesson.
                     </p>
                   ) : isSubscriber ? (
                     <p className="text-muted-foreground mt-1 text-sm md:text-base">
-                      Welcome {user?.username || "Student"}! You have {lessonBalance} lesson credits remaining.
+                      Welcome {user?.username || "Student"}! {lessonBalance} lesson slots and {Math.ceil(remainingWatchTimeSeconds / 60)} viewing minutes remain.
                     </p>
                   ) : (
                     <p className="text-muted-foreground mt-1 text-sm md:text-base">
@@ -341,10 +409,10 @@ export default function GoToClassPage() {
                     <div className="bg-green-50 border border-green-200 rounded-lg p-2 md:p-3">
                       <div className="flex items-center gap-1.5 md:gap-2 text-green-700">
                         <Zap className="h-4 w-4 md:h-5 md:w-5" />
-                        <span className="font-semibold text-sm md:text-base">{lessonBalance} Credits</span>
+                        <span className="font-semibold text-sm md:text-base">{lessonBalance} lesson slots</span>
                       </div>
                       <p className="text-xs text-green-600 mt-0.5 md:mt-1">
-                        {lessonsViewed}/{totalLessons} used
+                        {lessonsViewed}/{totalLessons} lessons used · {Math.ceil(remainingWatchTimeSeconds / 60)} min left
                       </p>
                     </div>
                   </div>
@@ -372,7 +440,7 @@ export default function GoToClassPage() {
                     <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5 shrink-0" />
                     <div>
                       <p className="text-sm font-medium text-orange-800">
-                        Credits exhausted. You can buy individual lessons at KES {lessonFees.subscribed.fee} or renew your subscription.
+                        A package limit has been reached. You can buy an individual lesson at the subscriber rate (KES {lessonFees.subscribed.fee}) or renew your subscription.
                       </p>
                     </div>
                   </div>
@@ -482,11 +550,6 @@ export default function GoToClassPage() {
                             {selectionHandlers.lessons.map((lesson) => {
                               const status = purchaseStatuses.get(lesson.id);
                               const isPurchased = status?.purchased;
-                              const watchTime = isExhaustedSubscriber
-                                ? lessonFees.subscribed.duration
-                                : isSubscriber
-                                  ? lessonFees.subscribed.duration
-                                  : lessonFees.non_subscribed.duration;
                               const price = isExhaustedSubscriber
                                 ? lessonFees.subscribed.fee
                                 : isSubscriber
@@ -497,9 +560,9 @@ export default function GoToClassPage() {
                                 <div key={lesson.id} className="p-3 md:p-4 space-y-3">
                                   <div className="flex justify-between items-start">
                                     <h3 className="font-medium text-sm md:text-base pr-2">{lesson.title}</h3>
-                                    {isExhaustedSubscriber || isSubscriber ? (
+                                    {isSubscriber ? (
                                       <span className="text-xs md:text-sm font-medium text-green-600 shrink-0">
-                                        {isExhaustedSubscriber && !isPurchased ? `KES ${price}` : "Included"}
+                                        {isExhaustedSubscriber && !isPurchased ? `KES ${price} if purchased` : "Included; subscriber rate if package limits are reached"}
                                       </span>
                                     ) : (
                                       <span className="text-xs md:text-sm font-medium shrink-0">KES {price}</span>
@@ -507,30 +570,12 @@ export default function GoToClassPage() {
                                   </div>
                                   <div className="flex justify-between items-center">
                                     <span className="text-xs md:text-sm text-muted-foreground">
-                                      {watchTime} min
+                                      {isSubscriber ? "Shared package time" : `${lessonFees.non_subscribed.duration} min`}
                                     </span>
-                                    {isExhaustedSubscriber ? (
-                                      isPurchased ? (
-                                        <Button size="sm" onClick={() => handleWatchLesson(lesson)} className="text-xs">
-                                          <Play className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />
-                                          Watch
-                                        </Button>
-                                      ) : (
-                                        <Button
-                                          size="sm"
-                                          variant="secondary"
-                                          onClick={() => handleWatchLesson(lesson)}
-                                          className="text-xs"
-                                        >
-                                          <CreditCard className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />
-                                          Buy
-                                        </Button>
-                                      )
-                                    ) : isSubscriber ? (
+                                    {isSubscriber ? (
                                       <Button
                                         size="sm"
                                         onClick={() => handleWatchLesson(lesson)}
-                                        disabled={lessonBalance <= 0}
                                         className="text-xs"
                                       >
                                         <Play className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1" />
@@ -573,11 +618,6 @@ export default function GoToClassPage() {
                                 {selectionHandlers.lessons.map((lesson) => {
                                   const status = purchaseStatuses.get(lesson.id);
                                   const isPurchased = status?.purchased;
-                                  const watchTime = isExhaustedSubscriber
-                                    ? lessonFees.subscribed.duration
-                                    : isSubscriber
-                                      ? lessonFees.subscribed.duration
-                                      : lessonFees.non_subscribed.duration;
                                   const price = isExhaustedSubscriber
                                     ? lessonFees.subscribed.fee
                                     : isSubscriber
@@ -588,39 +628,22 @@ export default function GoToClassPage() {
                                     <tr key={lesson.id} className="border-b hover:bg-muted/50 transition-colors">
                                       <td className="py-3 px-4 font-medium">{lesson.title}</td>
                                       <td className="py-3 px-4 text-center text-sm">
-                                        {watchTime} min
+                                        {isSubscriber ? "Shared package time" : `${lessonFees.non_subscribed.duration} min`}
                                       </td>
                                       <td className="py-3 px-4 text-center">
-                                        {isExhaustedSubscriber || isSubscriber ? (
+                                        {isSubscriber ? (
                                           <span className="text-sm font-medium text-green-600">
-                                            {isExhaustedSubscriber && !isPurchased ? `KES ${price}` : "Included"}
+                                            {isExhaustedSubscriber && !isPurchased ? `KES ${price} if purchased` : "Included; subscriber rate if package limits are reached"}
                                           </span>
                                         ) : (
                                           <span className="text-sm font-medium">KES {price}</span>
                                         )}
                                       </td>
                                       <td className="py-3 px-4 text-right">
-                                        {isExhaustedSubscriber ? (
-                                          isPurchased ? (
-                                            <Button size="sm" onClick={() => handleWatchLesson(lesson)}>
-                                              <Play className="h-4 w-4 mr-1" />
-                                              Watch
-                                            </Button>
-                                          ) : (
-                                            <Button
-                                              size="sm"
-                                              variant="secondary"
-                                              onClick={() => handleWatchLesson(lesson)}
-                                            >
-                                              <CreditCard className="h-4 w-4 mr-1" />
-                                              Buy
-                                            </Button>
-                                          )
-                                        ) : isSubscriber ? (
+                                        {isSubscriber ? (
                                           <Button
                                             size="sm"
                                             onClick={() => handleWatchLesson(lesson)}
-                                            disabled={lessonBalance <= 0}
                                           >
                                             <Play className="h-4 w-4 mr-1" />
                                             Watch

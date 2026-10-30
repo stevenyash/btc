@@ -62,6 +62,8 @@ export interface StreamUrlResponse {
   lesson_balance?: number;
   title?: string;
   duration?: number;
+  access_mode?: "admin" | "subscription" | "individual" | "guest" | "preview";
+  remaining_watch_time_seconds?: number;
 }
 
 export interface PaymentResponse {
@@ -139,10 +141,12 @@ async getLessonsByArea(areaId: number): Promise<Lesson[]> {
    },
 
   async checkPurchaseStatus(phone: string, lessonId: number): Promise<GuestPurchaseStatus> {
-    const response = await publicApi.get(`/components_data/guest_lesson_status/${lessonId}`, {
-      params: { phone },
-    });
-    return response.data || { lesson_id: lessonId, purchased: false };
+    const statuses = await this.getAllPurchaseStatuses(phone, [lessonId]);
+    const status = statuses.find((item) => item.lesson_id === lessonId);
+    if (!status) {
+      throw new Error(`Guest purchase status was not returned for lesson ${lessonId}`);
+    }
+    return status;
   },
 
   async getAllPurchaseStatuses(phone: string, lessonIds: number[]): Promise<GuestPurchaseStatus[]> {
@@ -150,21 +154,30 @@ async getLessonsByArea(areaId: number): Promise<Lesson[]> {
       phone,
       lesson_ids: lessonIds,
     });
-    return response.data || [];
+    const payload = response.data;
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (Array.isArray(payload?.data)) {
+      return payload.data;
+    }
+    throw new Error("Invalid guest lesson purchase status response");
   },
 
-  async purchaseLesson(phone: string, lessonId: number, paymentData: {
-    amount: number;
-    checkoutRequestID: string;
-    transactionID?: string;
-    duration?: number;
-  }): Promise<{ success: boolean; message: string }> {
-    const response = await publicApi.post("/components_data/guest_purchase_lesson", {
-      phone,
-      lesson_id: lessonId,
-      ...paymentData,
+  async activatePaymentSession(
+    checkoutRequestID: string,
+    guestSessionKey?: string,
+    phone?: string
+  ): Promise<{ success: boolean; phone: string }> {
+    const response = await publicApi.post(`/mpesa/guest-session/${encodeURIComponent(checkoutRequestID)}`, {
+      ...(guestSessionKey && { guestSessionKey }),
+      ...(phone && { phone }),
     });
-    return response.data || { success: false, message: "Unknown error" };
+    return response.data;
+  },
+
+  async clearPaymentSession(): Promise<void> {
+    await publicApi.post("/mpesa/guest-session/clear");
   },
 
   async getLessonSettings(): Promise<{ subscribed: { fee: number; duration: number }; non_subscribed: { fee: number; duration: number } }> {
@@ -195,18 +208,25 @@ async getLessonsByArea(areaId: number): Promise<Lesson[]> {
     return response.data || { success: false, message: "Failed to initiate payment" };
   },
 
-  async getStreamUrl(lessonId: number, phone: string): Promise<StreamUrlResponse> {
+  async getStreamUrl(
+    lessonId: number,
+    phone: string,
+    deviceId?: string,
+    signal?: AbortSignal,
+  ): Promise<StreamUrlResponse> {
     const response = await publicApi.get(`/lessons/stream-url/${lessonId}`, {
-      params: { phone, guest: "true" },
+      params: { phone, guest: "true", device_id: deviceId },
+      signal,
     });
     return response.data;
   },
 
-  async updateWatchTime(phone: string, lessonId: number, watchTimeSeconds: number): Promise<void> {
+  async updateWatchTime(phone: string, lessonId: number, watchTimeSeconds: number, deviceId?: string): Promise<void> {
     await publicApi.post("/components_data/guest_update_watch_time", {
       phone,
       lesson_id: lessonId,
       watch_time: watchTimeSeconds,
+      device_id: deviceId,
     });
   },
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CheckCircle, Loader2, Search } from 'lucide-react';
+import { CheckCircle, Loader2, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { SyncedLesson } from '@/types/bunny-sync';
 
@@ -13,6 +13,8 @@ interface SyncedLessonsModalProps {
   searchQuery: string;
   filterStatus: string;
   getSyncStatusBadge: (status?: string) => React.ReactNode;
+  onSyncLesson: (lessonId: number) => Promise<void>;
+  syncingLessonId: number | null;
 }
 
 export const SyncedLessonsModal: React.FC<SyncedLessonsModalProps> = ({
@@ -25,6 +27,8 @@ export const SyncedLessonsModal: React.FC<SyncedLessonsModalProps> = ({
   searchQuery,
   filterStatus,
   getSyncStatusBadge,
+  onSyncLesson,
+  syncingLessonId,
 }) => {
   const handleClose = () => {
     onClose();
@@ -113,6 +117,7 @@ export const SyncedLessonsModal: React.FC<SyncedLessonsModalProps> = ({
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border-b">Bunny Video ID</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border-b">Transcoding</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border-b">Progress</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border-b">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -141,6 +146,20 @@ export const SyncedLessonsModal: React.FC<SyncedLessonsModalProps> = ({
                           </div>
                           <span className="text-sm text-gray-600">{lesson.sync_progress || 0}%</span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={syncingLessonId !== null}
+                          onClick={() => onSyncLesson(lesson.id)}
+                        >
+                          {syncingLessonId === lesson.id ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Syncing</>
+                          ) : (
+                            <><RefreshCw className="h-4 w-4 mr-2" /> Sync</>
+                          )}
+                        </Button>
                       </td>
                     </tr>
                   ))}

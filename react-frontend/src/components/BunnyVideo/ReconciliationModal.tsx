@@ -47,8 +47,8 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
         setResult(response.data);
         return;
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -84,7 +84,7 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
         </div>
         <div className="text-center">
           <div className="text-xl font-bold text-green-600">{res.linked}</div>
-          <div className="text-xs text-gray-500">Linked</div>
+          <div className="text-xs text-gray-500">{res.dryRun ? 'Would Link' : 'Linked'}</div>
         </div>
         <div className="text-center">
           <div className="text-xl font-bold text-amber-600">{res.skipped}</div>
@@ -103,7 +103,7 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
               <tr>
                 <th className="px-3 py-2 text-left">Video</th>
                 <th className="px-3 py-2 text-left">Lesson</th>
-                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Decision</th>
               </tr>
             </thead>
             <tbody>
@@ -128,6 +128,7 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
                       {detail.status === 'error' && <XCircle className="h-3 w-3" />}
                       {detail.status}
                     </span>
+                    <p className="mt-1 text-xs text-gray-600">{detail.message}</p>
                   </td>
                 </tr>
               ))}
@@ -229,7 +230,7 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
   const getDescription = () => {
     switch (mode) {
       case 'reconcile':
-        return 'Map Bunny videos to lessons by parsing video titles';
+        return 'Match Bunny titles to existing lessons by grade, learning area, topic, and strand';
       case 'cleanup':
         return 'Remove bunny_video_id references for videos that no longer exist in Bunny';
       case 'stats':
@@ -291,7 +292,7 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
               <Info className="h-12 w-12 mx-auto text-blue-500 mb-4" />
               <p className="text-gray-600 mb-4">
                 {mode === 'reconcile'
-                  ? 'This will parse all Bunny video titles and automatically link them to matching lessons based on the learning hierarchy (grade → area → topic → subtopic).'
+                  ? 'Reconciliation only links Bunny videos to existing lessons when the grade, learning area, and lesson topic/subtopic produce one unambiguous match. It will not create hierarchy records or lessons, overwrite an existing video link, or choose between duplicate matches. Run Dry Run first and review the results before applying.'
                   : 'This will check all Bunny video references and remove those that no longer exist in Bunny Stream. The lesson record will be preserved, only the video reference is cleared.'}
               </p>
             </div>
@@ -331,7 +332,7 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
                       ) : (
                         mode === 'reconcile' ? <RefreshCw className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />
                       )}
-                      {isLoading ? 'Running...' : mode === 'reconcile' ? 'Run Reconciliation' : 'Run Cleanup'}
+                      {isLoading ? 'Running...' : mode === 'reconcile' ? 'Apply Reconciliation' : 'Run Cleanup'}
                     </Button>
                   </>
                 )}

@@ -55,6 +55,14 @@ export interface RecentTransaction {
   amount: number;
   status: string;
   created_at: string;
+  phone_number?: string | null;
+  transaction_reference?: string | null;
+  checkout_request_id?: string | null;
+  callback_amount?: number | null;
+  payment_status?: string | null;
+  activation_status?: string | null;
+  activation_type?: string | null;
+  lesson_id?: number | null;
 }
 
 export interface User {
@@ -107,7 +115,11 @@ export interface Lesson {
     id: number;
     title: string;
     description: string;
-    grade: string; // display name of area
+    grade: string;
+    grade_id?: number;
+    level?: string;
+    level_id?: number;
+    area_name?: string;
     subject: string; // display name of topic
     strand?: string; // display name of subtopic
     video_url?: string;
@@ -242,6 +254,7 @@ export interface Package {
   fee: number;
   concurrent_access: number;
   no_of_lessons: number;
+  watch_time_minutes: number;
   duration_amount: number;
   duration_unit: string;
   created_at: string;
@@ -254,6 +267,7 @@ export interface CreatePackageData {
   fee: number;
   concurrent_access: number;
   no_of_lessons: number;
+  watch_time_minutes: number;
   duration_amount: number;
   duration_unit: string;
 }
@@ -290,6 +304,8 @@ export interface CreateLessonData {
     areaId?: number;
     topicId?: number;
     subtopicId?: number;
+    gradeId?: number;
+    levelId?: number;
     price?: number;
     is_preview_available?: boolean;
     preview_duration?: number;
@@ -325,7 +341,7 @@ export interface AdminService {
    createUser(data: CreateUserData): Promise<User>;
    updateUser(id: number, data: Partial<User>): Promise<User>;
    deleteUser(id: number): Promise<void>;
-  getTransactions(page?: number, limit?: number): Promise<{ data: RecentTransaction[]; total: number }>;
+  getTransactions(page?: number, limit?: number, status?: string, search?: string): Promise<{ data: RecentTransaction[]; total: number }>;
   updateTransaction(id: number, data: Partial<RecentTransaction>): Promise<RecentTransaction>;
   deleteTransaction(id: number): Promise<void>;
     getMarketers(page?: number, limit?: number): Promise<{ data: Marketer[]; total: number }>;
@@ -515,9 +531,9 @@ export const adminService: AdminService = {
       await api.delete(`/admin/users/${id}`);
     },
 
-   async getTransactions(page: number = 1, limit: number = 20): Promise<{ data: RecentTransaction[]; total: number }> {
+   async getTransactions(page: number = 1, limit: number = 20, status?: string, search?: string): Promise<{ data: RecentTransaction[]; total: number }> {
      const response = await api.get("/admin/transactions", {
-       params: { page, limit }
+       params: { page, limit, status: status || undefined, search: search || undefined }
      });
      return {
        data: response.data?.data || response.data || [],

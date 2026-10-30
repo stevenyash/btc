@@ -61,6 +61,21 @@ export interface VideoMetadataStream {
   captions?: Array<{ srclang: string; label: string; url: string }>;
 }
 
+export interface VideoPlayData {
+  video?: {
+    guid: string;
+    title: string;
+    status: number;
+    [key: string]: unknown;
+  } | null;
+  videoPlaylistUrl?: string | null;
+  originalUrl?: string | null;
+  thumbnailUrl?: string | null;
+  isPlayable: boolean;
+  isPlaylistPlayable: boolean;
+  tokenAuthEnabled: boolean;
+}
+
 export interface CaptionsOptions {
   srclang: string;
   label: string;
@@ -123,11 +138,19 @@ async function bunnyApiRequest<T>(
 // Helper functions
 export function mapStatus(status: number): 'pending' | 'processing' | 'completed' | 'failed' {
   switch (status) {
-    case 0: return 'completed';
-    case 1: return 'pending';
-    case 2: return 'processing';
-    case 3: return 'completed';
-    case 4: return 'failed';
+    case 0:
+    case 1:
+      return 'pending';
+    case 2:
+    case 3:
+    case 7:
+      return 'processing';
+    case 4:
+    case 8:
+      return 'completed';
+    case 5:
+    case 6:
+      return 'failed';
     default: return 'failed';
   }
 }
@@ -328,6 +351,34 @@ export async function getStreamVideo(videoId: string): Promise<StreamVideo> {
     };
   } catch (error: any) {
     console.error(`Error fetching video ${videoId}:`, error);
+    throw error;
+  }
+}
+
+export async function getVideoPlayData(
+  videoId: string,
+  expiresIn = bunnyConfig.defaultTokenExpiry
+): Promise<VideoPlayData> {
+  const params = new URLSearchParams();
+  if (bunnyConfig.streamTokenAuthKey) {
+    const expires = Math.floor(Date.now() / 1000) + expiresIn;
+    const token = crypto
+      .createHash('sha256')
+      .update(`${bunnyConfig.streamTokenAuthKey}${videoId}${expires}`)
+      .digest('hex');
+    params.set('token', token);
+    params.set('expires', String(expires));
+  }
+
+  const query = params.size ? `?${params.toString()}` : '';
+  try {
+    return await bunnyApiRequest<VideoPlayData>(
+      `/library/${bunnyConfig.libraryId}/videos/${encodeURIComponent(videoId)}/play${query}`
+    );
+  } catch (error) {
+    if (!bunnyConfig.streamTokenAuthKey && error instanceof Error && error.message.includes('(401)')) {
+      throw new Error('Bunny rejected the playback-data request. Configure BUNNY_STREAM_TOKEN_AUTH_KEY with the Stream library token authentication key.');
+    }
     throw error;
   }
 }
@@ -754,6 +805,7 @@ export default {
 
   // Videos
   getStreamVideo,
+  getVideoPlayData,
   getStreamVideos,
   getVideo,
   createVideo,

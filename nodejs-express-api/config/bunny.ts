@@ -10,6 +10,9 @@ export const bunnyConfig = {
   // Video library ID
   libraryId: process.env.BUNNY_VIDEO_LIBRARY_ID || '',
 
+  // Stream embed token authentication key (separate from the API access key)
+  streamTokenAuthKey: process.env.BUNNY_STREAM_TOKEN_AUTH_KEY || '',
+
   // Storage zone ID (for Bunny Storage operations)
   storageZoneId: process.env.BUNNY_STORAGE_ZONE_ID || '',
 

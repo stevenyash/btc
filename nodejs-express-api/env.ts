@@ -6,16 +6,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const env = process.env.NODE_ENV || 'development';
+const profileFile = env === 'production' ? '.env.production' : '.env.development';
+const selectedProfile = path.resolve(__dirname, profileFile);
 
-const envFiles = [
-  '.env',
-  `.env.${env}`,
-  '.env.local',
-];
-
-for (const envFile of envFiles) {
-  dotenv.config({ path: path.resolve(__dirname, envFile) });
-}
+dotenv.config({ path: selectedProfile });
 
 // Environment variables are now available via process.env
 // Example: process.env.APP_NAME, process.env.DB_HOST, etc.

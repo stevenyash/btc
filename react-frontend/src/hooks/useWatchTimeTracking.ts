@@ -32,23 +32,6 @@ export function useWatchTimeTracking({
         const currentWatchTime = watchTimeRef.current;
         setWatchTime(currentWatchTime);
 
-        // Update localStorage for guest users (resume capability)
-        if (!isSubscriber && phone) {
-          try {
-            const stored = localStorage.getItem("guest_lesson_payments");
-            if (stored) {
-              const payments = JSON.parse(stored);
-              const key = `${phone}_${selectedLessonId}`;
-              if (payments[key]) {
-                payments[key].watchTime = currentWatchTime;
-                localStorage.setItem("guest_lesson_payments", JSON.stringify(payments));
-              }
-            }
-          } catch {
-            // Ignore localStorage errors
-          }
-        }
-
         // Send periodic updates to server (every 10 seconds)
         if (currentWatchTime % 10 === 0) {
           try {

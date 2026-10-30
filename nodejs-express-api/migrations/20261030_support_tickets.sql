@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `support_tickets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `tracking_token_hash` char(64) NOT NULL,
+  `customer_name` varchar(100) NOT NULL,
+  `customer_email` varchar(255) NOT NULL,
+  `phone_number` varchar(20) NOT NULL,
+  `payment_reference` varchar(100) DEFAULT NULL,
+  `category` varchar(32) NOT NULL,
+  `subject` varchar(150) NOT NULL,
+  `description` text NOT NULL,
+  `status` enum('open','in_progress','resolved') NOT NULL DEFAULT 'open',
+  `admin_response` text DEFAULT NULL,
+  `handled_by_user_id` int DEFAULT NULL,
+  `resolved_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_support_tickets_tracking_token_hash` (`tracking_token_hash`),
+  KEY `idx_support_tickets_status_created` (`status`,`created_at`),
+  KEY `idx_support_tickets_user_created` (`user_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

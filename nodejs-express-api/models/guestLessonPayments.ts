@@ -12,6 +12,8 @@ interface GuestLessonPaymentsAttributes {
 	amount: number | null;
 	paid_at: Date | null;
 	expires_at: Date;
+	watch_time_limit_seconds: number;
+	watch_time_used_seconds: number;
 	created_at: Date;
 	updated_at: Date;
 }
@@ -37,6 +39,8 @@ class GuestLessonPayments extends BaseModel<GuestLessonPaymentsAttributes, Guest
 				amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
 				paid_at: { type: DataTypes.DATE, allowNull: true },
 				expires_at: { type: DataTypes.DATE, allowNull: false },
+				watch_time_limit_seconds: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false, defaultValue: 0 },
+				watch_time_used_seconds: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false, defaultValue: 0 },
 				created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
 				updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 			},
@@ -57,11 +61,11 @@ class GuestLessonPayments extends BaseModel<GuestLessonPaymentsAttributes, Guest
 	}
 
 	static listFields(): string[] {
-		return ["id", "phone", "lesson_id", "checkout_request_id", "transaction_status", "amount", "paid_at", "expires_at", "created_at"];
+		return ["id", "phone", "lesson_id", "checkout_request_id", "transaction_status", "amount", "paid_at", "expires_at", "watch_time_limit_seconds", "watch_time_used_seconds", "created_at"];
 	}
 
 	static viewFields(): string[] {
-		return ["id", "phone", "lesson_id", "checkout_request_id", "transaction_status", "amount", "paid_at", "expires_at", "created_at", "updated_at"];
+		return ["id", "phone", "lesson_id", "checkout_request_id", "transaction_status", "amount", "paid_at", "expires_at", "watch_time_limit_seconds", "watch_time_used_seconds", "created_at", "updated_at"];
 	}
 
 	static editFields(): string[] {
@@ -79,14 +83,17 @@ class GuestLessonPayments extends BaseModel<GuestLessonPaymentsAttributes, Guest
 	}
 
  	static async findActiveByPhoneAndLesson(phone: string, lessonId: number) {
- 		const now = new Date();
  		return this.findOne({
  			where: {
  				phone,
  				lesson_id: lessonId,
  				transaction_status: 'completed',
- 				expires_at: { [Op.gt]: now }
- 			}
+ 				[Op.and]: sequelize.where(
+ 					sequelize.col('watch_time_limit_seconds'),
+ 					{ [Op.gt]: sequelize.col('watch_time_used_seconds') }
+ 				)
+ 			},
+ 			order: [['paid_at', 'DESC']]
  		});
  	}
 }

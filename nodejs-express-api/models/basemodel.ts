@@ -14,7 +14,7 @@ import { Literal } from "sequelize/types/utils.js";
 
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'btc',
-  process.env.DB_USERNAME || 'root',
+  process.env.DB_USERNAME || process.env.DB_USER || 'root',
   process.env.DB_PASSWORD || '',
   {
     dialect: (process.env.DB_TYPE || 'mysql') as Dialect,

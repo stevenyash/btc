@@ -30,7 +30,7 @@ import { WithPermission } from "@/components/WithPermission"
 
 export default function AdminDashboardPage() {
   const navigate = useNavigate()
-  const { isSuperadmin } = useRole()
+  const { isAdmin, isSuperadmin } = useRole()
   const {
     stats,
     recentUsers,
@@ -99,8 +99,17 @@ export default function AdminDashboardPage() {
                 Manage users, subscriptions, and monitor platform activity
               </p>
             </div>
-             {isSuperadmin && (
-               <div className="flex gap-2">
+             {(isAdmin || isSuperadmin) && (
+               <div className="flex gap-2 flex-wrap">
+                 <Button
+                   variant="secondary"
+                   className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                   onClick={() => navigate("/admin/bunny-sync")}
+                 >
+                   <Video className="mr-2 h-4 w-4" />
+                   Bunny Video Sync
+                 </Button>
+                 {isSuperadmin && (
                  <Button 
                    variant="secondary"
                    className="bg-amber-500 hover:bg-amber-600 text-white"
@@ -109,6 +118,7 @@ export default function AdminDashboardPage() {
                    <Shield className="mr-2 h-4 w-4" />
                    Roles & Permissions
                  </Button>
+                 )}
                </div>
              )}
           </div>

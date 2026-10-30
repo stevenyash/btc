@@ -24,7 +24,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { adminService, type Lesson, type CreateLessonData } from "@/services/admin"
+import {
+  adminService,
+  type Lesson,
+  type CreateLessonData,
+  type LearningLevel,
+  type Grade,
+  type LearningArea,
+  type Topic,
+  type Subtopic,
+} from "@/services/admin"
 import Layout from "@/components/Layout"
 import { useNavigate } from "react-router-dom"
 
@@ -33,11 +42,13 @@ export default function LessonManagementPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
    
   const [lessons, setLessons] = useState<Lesson[]>([])
-  const [grades, setGrades] = useState<{ id: number; name: string }[]>([])
-  const [subjects, setSubjects] = useState<{ id: number; name: string }[]>([])
-  const [strands, setStrands] = useState<{ id: number; name: string }[]>([])
+  const [levels, setLevels] = useState<LearningLevel[]>([])
+  const [grades, setGrades] = useState<Grade[]>([])
+  const [areas, setAreas] = useState<LearningArea[]>([])
+  const [topics, setTopics] = useState<Topic[]>([])
+  const [subtopics, setSubtopics] = useState<Subtopic[]>([])
     
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
@@ -59,6 +70,8 @@ export default function LessonManagementPage() {
      areaId: undefined,
      topicId: undefined,
      subtopicId: undefined,
+     gradeId: undefined,
+     levelId: undefined,
      video_url: "",
      s3_url: "",
      s3_key: "",
@@ -71,41 +84,59 @@ export default function LessonManagementPage() {
    const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const fetchLessons = useCallback(async (page: number, grade: string, status: string) => {
+    const response = await adminService.getLessons(page, 20)
+    let filtered = response.data
+
+    if (grade) filtered = filtered.filter(lesson => lesson.grade === grade)
+    if (status) filtered = filtered.filter(lesson => lesson.status === status)
+
+    return { data: filtered, total: response.total }
+  }, [])
+
+  const refreshLessons = useCallback(async (page: number, grade: string, status: string) => {
     try {
-      const response = await adminService.getLessons(page, 20)
-      let filtered = response.data
-      
-      if (grade) {
-        filtered = filtered.filter(l => l.grade === grade)
-      }
-      if (status) {
-        filtered = filtered.filter(l => l.status === status)
-      }
-      
-      setLessons(filtered)
-      setTotal(response.total)
-      setTotalPages(Math.ceil(response.total / 20))
+      const result = await fetchLessons(page, grade, status)
+      setLessons(result.data)
+      setTotal(result.total)
+      setTotalPages(Math.ceil(result.total / 20))
     } catch (error) {
       console.error("Failed to fetch lessons:", error)
     }
-  }, [])
+  }, [fetchLessons])
 
    useEffect(() => {
-     setIsLoading(true)
-     fetchLessons(currentPage, filterGrade, filterStatus).finally(() => setIsLoading(false))
+     let isCurrent = true
+     fetchLessons(currentPage, filterGrade, filterStatus)
+       .then(result => {
+         if (!isCurrent) return
+         setLessons(result.data)
+         setTotal(result.total)
+         setTotalPages(Math.ceil(result.total / 20))
+       })
+       .catch(error => console.error("Failed to fetch lessons:", error))
+       .finally(() => {
+         if (isCurrent) setIsLoading(false)
+       })
+     return () => {
+       isCurrent = false
+     }
    }, [currentPage, filterGrade, filterStatus, fetchLessons])
 
    useEffect(() => {
      const fetchOptions = async () => {
        try {
-         const [gradesRes, subjectsRes, strandsRes] = await Promise.all([
-           adminService.getGrades(),
-           adminService.getSubjects(),
-           adminService.getStrands(),
+         const [levelsRes, gradesRes, areasRes, topicsRes, subtopicsRes] = await Promise.all([
+           adminService.getLearningLevels(),
+           adminService.getAllGrades(),
+           adminService.getAllLearningAreas(),
+           adminService.getAllTopics(),
+           adminService.getAllSubtopics(),
          ])
+         setLevels(levelsRes)
          setGrades(gradesRes)
-         setSubjects(subjectsRes)
-         setStrands(strandsRes)
+         setAreas(areasRes)
+         setTopics(topicsRes)
+         setSubtopics(subtopicsRes)
        } catch (error) {
          console.error("Failed to fetch options:", error)
        }
@@ -121,8 +152,8 @@ export default function LessonManagementPage() {
    };
 
    const handleCreateLesson = async () => {
-     if (!formData.title || !formData.areaId || !formData.topicId) {
-       toast.error("Please fill in required fields (title, grade, subject)")
+     if (!formData.title || !formData.levelId || !formData.gradeId || !formData.areaId || !formData.topicId) {
+       toast.error("Please select a title, level, grade, learning area, and subject")
        return
      }
      if (!selectedFile) {
@@ -147,7 +178,7 @@ export default function LessonManagementPage() {
 
        await adminService.createLessonWithVideo(fd, setUploadProgress)
        closeModal()
-       fetchLessons(currentPage, filterGrade, filterStatus)
+       await refreshLessons(currentPage, filterGrade, filterStatus)
        toast.success("Lesson created successfully")
      } catch (error) {
        console.error("Failed to create lesson:", error)
@@ -176,7 +207,7 @@ export default function LessonManagementPage() {
        }
        await adminService.updateLesson(editingLesson.id, payload)
        closeModal()
-       fetchLessons(currentPage, filterGrade, filterStatus)
+       await refreshLessons(currentPage, filterGrade, filterStatus)
        toast.success("Lesson updated successfully")
      } catch (error) {
        console.error("Failed to update lesson:", error)
@@ -192,7 +223,7 @@ export default function LessonManagementPage() {
     setIsLoading(true)
     try {
       await adminService.deleteLesson(id)
-      fetchLessons(currentPage, filterGrade, filterStatus)
+      await refreshLessons(currentPage, filterGrade, filterStatus)
       toast.success("Lesson deleted successfully")
     } catch (error) {
       console.error("Failed to delete lesson:", error)
@@ -213,7 +244,7 @@ export default function LessonManagementPage() {
        ))
      } catch (error) {
        console.error("Failed to toggle lesson:", error)
-       fetchLessons(currentPage, filterGrade, filterStatus)
+       void refreshLessons(currentPage, filterGrade, filterStatus)
      } finally {
        setIsLoading(false)
      }
@@ -230,6 +261,8 @@ export default function LessonManagementPage() {
        grade: fullLesson.grade || "",
        subject: fullLesson.subject || "",
        strand: fullLesson.strand || "",
+       levelId: fullLesson.level_id,
+       gradeId: fullLesson.grade_id,
        areaId: fullLesson.area_id ?? undefined,
        topicId: fullLesson.topic_id ?? undefined,
        subtopicId: fullLesson.subtopic_id ?? undefined,
@@ -253,6 +286,8 @@ export default function LessonManagementPage() {
        grade: "",
        subject: "",
        strand: "",
+       levelId: undefined,
+       gradeId: undefined,
        areaId: undefined,
        topicId: undefined,
        subtopicId: undefined,
@@ -361,7 +396,7 @@ export default function LessonManagementPage() {
                   onClick={async () => {
                     setIsLoading(true)
                     try {
-                      await fetchLessons(currentPage, filterGrade, filterStatus)
+                      await refreshLessons(currentPage, filterGrade, filterStatus)
                     } finally {
                       setIsLoading(false)
                     }
@@ -428,7 +463,9 @@ export default function LessonManagementPage() {
                         
                         <div className="p-4">
                           <h3 className="font-semibold mb-1 line-clamp-1">{lesson.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-2">{lesson.subject}</p>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {lesson.area_name ? `${lesson.area_name} • ` : ''}{lesson.subject}
+                          </p>
                           
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
                             {lesson.duration_minutes && (
@@ -557,16 +594,72 @@ export default function LessonManagementPage() {
                 </div>
 
                 <div>
+                  <Label htmlFor="level">Level *</Label>
+                  <select
+                    id="level"
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    value={formData.levelId || ""}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      levelId: e.target.value ? Number(e.target.value) : undefined,
+                      gradeId: undefined,
+                      areaId: undefined,
+                      topicId: undefined,
+                      subtopicId: undefined,
+                    }))}
+                  >
+                    <option value="">Select Level</option>
+                    {levels.map(level => (
+                      <option key={level.id} value={level.id}>
+                        {level.name}{level.is_active === false ? ' (inactive)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <Label htmlFor="grade">Grade *</Label>
                   <select 
                     id="grade"
                     className="w-full px-3 py-2 border rounded-md bg-background"
-                    value={formData.areaId || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, areaId: e.target.value ? Number(e.target.value) : undefined }))}
+                    value={formData.gradeId || ""}
+                    disabled={!formData.levelId}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      gradeId: e.target.value ? Number(e.target.value) : undefined,
+                      areaId: undefined,
+                      topicId: undefined,
+                      subtopicId: undefined,
+                    }))}
                   >
                     <option value="">Select Grade</option>
-                    {grades.map(g => (
-                      <option key={g.id} value={g.id}>{g.name}</option>
+                    {grades.filter(grade => grade.level_id === formData.levelId).map(grade => (
+                      <option key={grade.id} value={grade.id}>
+                        {grade.name}{grade.is_active === false ? ' (inactive)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="area">Learning Area *</Label>
+                  <select
+                    id="area"
+                    className="w-full px-3 py-2 border rounded-md bg-background"
+                    value={formData.areaId || ""}
+                    disabled={!formData.gradeId}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      areaId: e.target.value ? Number(e.target.value) : undefined,
+                      topicId: undefined,
+                      subtopicId: undefined,
+                    }))}
+                  >
+                    <option value="">Select Learning Area</option>
+                    {areas.filter(area => area.grade_id === formData.gradeId).map(area => (
+                      <option key={area.id} value={area.id}>
+                        {area.name}{area.is_active === false ? ' (inactive)' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -577,11 +670,16 @@ export default function LessonManagementPage() {
                     id="subject"
                     className="w-full px-3 py-2 border rounded-md bg-background"
                     value={formData.topicId || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, topicId: e.target.value ? Number(e.target.value) : undefined }))}
+                    disabled={!formData.areaId}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      topicId: e.target.value ? Number(e.target.value) : undefined,
+                      subtopicId: undefined,
+                    }))}
                   >
                     <option value="">Select Subject</option>
-                    {subjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                    {topics.filter(topic => topic.area_id === formData.areaId).map(topic => (
+                      <option key={topic.id} value={topic.id}>{topic.name}</option>
                     ))}
                   </select>
                 </div>
@@ -595,8 +693,8 @@ export default function LessonManagementPage() {
                     onChange={(e) => setFormData(prev => ({ ...prev, subtopicId: e.target.value ? Number(e.target.value) : undefined }))}
                   >
                     <option value="">Select Strand (Optional)</option>
-                    {strands.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                    {subtopics.filter(subtopic => subtopic.topic_id === formData.topicId).map(subtopic => (
+                      <option key={subtopic.id} value={subtopic.id}>{subtopic.name}</option>
                     ))}
                   </select>
                 </div>

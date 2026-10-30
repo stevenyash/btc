@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import DB from '../models/db.js';
 import jwt from 'jsonwebtoken';
+import {
+  assertSubscriberDeviceAvailable,
+  LessonAccessLimitError,
+  registerSubscriberDevice,
+} from '../services/classAccessService.js';
+import { normalizeGuestPhone, readGuestSessionPhone } from '../helpers/guestSession.js';
 
 interface LessonAccessRequest extends Request {
   user?: any;
@@ -8,10 +14,16 @@ interface LessonAccessRequest extends Request {
     hasAccess: boolean;
     isPreview: boolean;
     isGuest: boolean;
-    accessType: 'subscription' | 'purchase' | 'preview' | 'none';
+    accessType: 'admin' | 'subscription' | 'purchase' | 'preview' | 'none';
     lesson?: any;
     maxWatchTime?: number;
+    accessMode?: 'admin' | 'subscription' | 'individual' | 'guest' | 'preview';
+    deviceId?: string;
+    lessonTrackId?: number;
+    limitReason?: string;
   };
+  isAdmin?: boolean;
+  isSuperadmin?: boolean;
 }
 
 export const validateLessonAccess = async (
@@ -50,6 +62,13 @@ export const validateLessonAccess = async (
       lesson: lessonData,
     };
 
+    if (req.user?.id && (req.isAdmin === true || req.isSuperadmin === true)) {
+      req.lessonAccess.hasAccess = true;
+      req.lessonAccess.accessType = 'admin';
+      req.lessonAccess.accessMode = 'admin';
+      return next();
+    }
+
     // Check if lesson is preview-available (public access)
     if (lessonData.is_preview_available) {
       req.lessonAccess.hasAccess = true;
@@ -58,14 +77,38 @@ export const validateLessonAccess = async (
       return next();
     }
 
-    // Extract user from JWT token (if present)
+    const guestPhone = normalizeGuestPhone(req.query.phone || req.body.phone);
+    const isExplicitGuestRequest = req.query.guest === 'true' && guestPhone !== null;
+    const sessionPhone = readGuestSessionPhone(req);
+
+    // Extract user from JWT token (if present), unless this is an explicit guest stream request.
     let userId: number | null = null;
     let isGuest = false;
 
     console.log('[DEBUG] validateLessonAccess - req.user:', req.user);
     console.log('[DEBUG] validateLessonAccess - Authorization header:', req.headers.authorization?.substring(0, 20) + '...');
 
-    if (req.user?.id) {
+    if (isExplicitGuestRequest && req.user?.id) {
+      const authenticatedUser = await DB.Users.findOne({
+        where: { id: req.user.id },
+        attributes: ['phone'],
+        raw: true,
+      });
+      if (normalizeGuestPhone(authenticatedUser?.phone) === guestPhone) {
+        userId = Number(req.user.id);
+      } else {
+        if (sessionPhone !== guestPhone) {
+          return res.status(401).json({ error: 'Verify this phone number before streaming its purchased lessons' });
+        }
+        isGuest = true;
+      }
+    } else if (isExplicitGuestRequest) {
+      if (sessionPhone !== guestPhone) {
+        return res.status(401).json({ error: 'Verify this phone number before streaming its purchased lessons' });
+      }
+      req.guestPhone = guestPhone;
+      isGuest = true;
+    } else if (req.user?.id) {
       // User already authenticated by passport-jwt
       userId = req.user.id;
       console.log('[DEBUG] User already authenticated by passport-jwt, userId:', userId);
@@ -85,14 +128,12 @@ export const validateLessonAccess = async (
           isGuest = true;
         }
       } else if (req.query.phone || req.body.phone) {
-        // Guest access with phone number
-        isGuest = true;
+        return res.status(401).json({ error: 'Verify this phone number before streaming its purchased lessons' });
       }
     }
 
     // Check access for authenticated users
     if (userId) {
-      // Check subscription
       const subscription = await DB.Subscriptions.findOne({
         where: {
           user_id: String(userId),
@@ -101,51 +142,98 @@ export const validateLessonAccess = async (
         },
         raw: true,
       });
-      
-      console.log('[DEBUG] Subscription found:', subscription);
 
       if (subscription) {
-        req.lessonAccess.hasAccess = true;
-        req.lessonAccess.accessType = 'subscription';
-        return next();
+        const lessonTrack = await DB.LessonTrack.findOne({
+          where: { user_id: userId, subscription_id: subscription.id, status: 'active' },
+        });
+        const packageRecord = lessonTrack
+          ? await DB.Packages.findOne({ where: { id: lessonTrack.package_id }, raw: true })
+          : null;
+        const deviceId = String(req.query.device_id || '');
+
+        if (lessonTrack && packageRecord) {
+          if (!/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId)) {
+            return res.status(400).json({
+              error: 'A valid playback device ID is required',
+              code: 'DEVICE_ID_REQUIRED',
+            });
+          }
+
+          const usedCount = await DB.SubscriptionLessonUsage.count({
+            where: { subscription_id: subscription.id },
+          });
+          const alreadyCounted = await DB.SubscriptionLessonUsage.findOne({
+            where: { subscription_id: subscription.id, lesson_id: lessonId },
+          });
+          const remainingWatchTime = Number(lessonTrack.remaining_watch_time_seconds || 0);
+          const lessonLimitReached = !alreadyCounted && usedCount >= Number(lessonTrack.total_lessons || 0);
+          const packageCanAccess = remainingWatchTime > 0 && !lessonLimitReached;
+          let packageDeviceAvailable = packageCanAccess;
+
+          if (!packageCanAccess) {
+            req.lessonAccess.limitReason = remainingWatchTime <= 0
+              ? 'WATCH_TIME_EXHAUSTED'
+              : 'LESSON_LIMIT_REACHED';
+          } else {
+            try {
+              if (req.query.check_only === 'true') {
+                await assertSubscriberDeviceAvailable(
+                  userId,
+                  deviceId,
+                  Number(packageRecord.concurrent_access || 1)
+                );
+              } else {
+                await registerSubscriberDevice(
+                  userId,
+                  deviceId,
+                  Number(lessonId),
+                  Number(packageRecord.concurrent_access || 1)
+                );
+              }
+            } catch (error) {
+              if (error instanceof LessonAccessLimitError) {
+                packageDeviceAvailable = false;
+                req.lessonAccess.limitReason = error.code;
+              } else {
+                throw error;
+              }
+            }
+          }
+
+          if (packageCanAccess && packageDeviceAvailable) {
+            req.lessonAccess.hasAccess = true;
+            req.lessonAccess.accessType = 'subscription';
+            req.lessonAccess.accessMode = 'subscription';
+            req.lessonAccess.lessonTrackId = Number(lessonTrack.id);
+            req.lessonAccess.maxWatchTime = remainingWatchTime;
+            req.lessonAccess.deviceId = deviceId;
+            return next();
+          }
+
+          req.lessonAccess.deviceId = deviceId;
+        }
       }
 
-      // Check if user purchased this lesson
-      const purchase = await DB.Transactions.findOne({
-        where: {
-          user_id: userId,
-          lesson_id: lessonId,
-          status: 'success',
-          payment_status: 'completed',
-        },
-        raw: true,
-      });
-
-      if (purchase) {
+      const user = await DB.Users.findOne({ where: { id: userId }, attributes: ['phone'], raw: true });
+      const phone = normalizeGuestPhone(user?.phone);
+      const individualPurchase = phone
+        ? await DB.GuestLessonPayments.findActiveByPhoneAndLesson(phone, Number(lessonId))
+        : null;
+      if (individualPurchase && Number(individualPurchase.watch_time_limit_seconds) > Number(individualPurchase.watch_time_used_seconds)) {
         req.lessonAccess.hasAccess = true;
         req.lessonAccess.accessType = 'purchase';
+        req.lessonAccess.accessMode = 'individual';
+        req.lessonAccess.maxWatchTime =
+          Number(individualPurchase.watch_time_limit_seconds) - Number(individualPurchase.watch_time_used_seconds);
+        req.lessonAccess.deviceId = req.lessonAccess.deviceId || String(req.query.device_id || '');
         return next();
       }
 
-      // Check lesson track with remaining balance
-      const lessonTrack = await DB.LessonTrack.findOne({
-        where: {
-          user_id: userId,
-          status: 'active',
-        },
-        raw: true,
-      });
-
-      if (lessonTrack && lessonTrack.lesson_balance > 0) {
-        req.lessonAccess.hasAccess = true;
-        req.lessonAccess.accessType = 'purchase';
-        return next();
-      }
-
-      // Authenticated user but no access - return 403
       return res.status(403).json({
-        error: 'No active subscription or lesson credits remaining.',
-        code: 'NO_SUBSCRIPTION_OR_CREDITS',
+        error: 'Package access is unavailable and this lesson has no active individual purchase.',
+        code: req.lessonAccess.limitReason || 'INDIVIDUAL_PURCHASE_REQUIRED',
+        purchase_required: true,
         lesson: {
           id: lessonData.id,
           title: lessonData.title,
@@ -156,7 +244,7 @@ export const validateLessonAccess = async (
 
     // For guests (with phone number)
     if (isGuest || req.query.phone) {
-      const phone = (req.query.phone as string) || (req.body.phone as string);
+      const phone = guestPhone;
       
       if (!phone) {
         return res.status(403).json({
@@ -169,56 +257,93 @@ export const validateLessonAccess = async (
         });
       }
 
-      // Check guest lesson payment
-      const guestPayment = await DB.GuestLessonPayments.findOne({
+      const lessonSettings = await DB.LessonSetting.findOne({
+        where: { subscription_type: 'non_subscribed' },
+        attributes: ['duration'],
+        raw: true,
+      });
+      const maxWatchTime = (Number(lessonSettings?.duration) || 90) * 60;
+      const watchRecord = await DB.LessonAccessLogs.findOne({
         where: {
           phone,
           lesson_id: lessonId,
-          transaction_status: 'completed',
         },
+        attributes: ['watch_time'],
         raw: true,
       });
+      const remainingWatchTime = Math.max(0, maxWatchTime - Number(watchRecord?.watch_time || 0));
 
-      if (guestPayment) {
+      // Check a completed guest payment that has not expired.
+      const guestPayment = await DB.GuestLessonPayments.findActiveByPhoneAndLesson(phone, Number(lessonId));
+      if (guestPayment &&
+          Number(guestPayment.watch_time_limit_seconds) > Number(guestPayment.watch_time_used_seconds)) {
         req.lessonAccess.hasAccess = true;
         req.lessonAccess.isGuest = true;
         req.lessonAccess.accessType = 'purchase';
+        req.lessonAccess.accessMode = 'individual';
+        req.lessonAccess.maxWatchTime =
+          Number(guestPayment.watch_time_limit_seconds) - Number(guestPayment.watch_time_used_seconds);
         return next();
       }
 
-      // Check guest tracker
+      // Keep support for legacy guest tracker records, but require an unexpired grant.
       const guestTracker = await DB.GuestTracker.findOne({
         where: {
           phone,
           lesson_id: lessonId,
           status: 'completed',
+          expires_at: { [DB.op.gt]: new Date() },
         },
         raw: true,
       });
 
-      if (guestTracker) {
+      if (guestTracker && remainingWatchTime > 0) {
         req.lessonAccess.hasAccess = true;
         req.lessonAccess.isGuest = true;
         req.lessonAccess.accessType = 'purchase';
+        req.lessonAccess.accessMode = 'guest';
+        req.lessonAccess.maxWatchTime = remainingWatchTime;
         return next();
       }
 
-      // Check transaction
+      // Keep access for legacy transactions only within the configured lesson duration.
       const transaction = await DB.Transactions.findOne({
         where: {
           phone_number: phone,
           lesson_id: lessonId,
           status: 'success',
           payment_status: 'completed',
+          created_at: { [DB.op.gte]: new Date(Date.now() - maxWatchTime * 1000) },
         },
         raw: true,
       });
 
-      if (transaction) {
+      if (transaction && remainingWatchTime > 0) {
         req.lessonAccess.hasAccess = true;
         req.lessonAccess.isGuest = true;
         req.lessonAccess.accessType = 'purchase';
+        req.lessonAccess.accessMode = 'guest';
+        req.lessonAccess.maxWatchTime = remainingWatchTime;
         return next();
+      }
+
+      if (remainingWatchTime <= 0) {
+        await DB.LessonAccessLogs.update(
+          { status: 'completed', completed_at: new Date() },
+          { where: { phone, lesson_id: lessonId, status: 'active' } }
+        );
+      } else {
+        await DB.LessonAccessLogs.update(
+          { status: 'expired' },
+          {
+            where: {
+              phone,
+              lesson_id: lessonId,
+              status: 'active',
+              expires_at: { [DB.op.lte]: new Date() },
+            },
+          }
+        );
       }
     }
 

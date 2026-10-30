@@ -42,6 +42,7 @@ export interface StkQueryResponse {
   CheckoutRequestID: string;
   ResultCode: string;
   ResultDesc: string;
+  MpesaReceiptNumber?: string;
 }
 
 export interface MpesaCallbackBody {

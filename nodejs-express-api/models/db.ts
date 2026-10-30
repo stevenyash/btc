@@ -16,6 +16,8 @@ import Lessons from './lessons.js';
 import LessonSetting from './lessonsetting.js';
 import LessonTrack from './lessontrack.js';
 import LessonAccessLogs from './lessonaccesslogs.js';
+import SubscriptionLessonUsage from './subscriptionLessonUsage.js';
+import SubscriptionDeviceSession from './subscriptionDeviceSession.js';
 import Marketers from './marketers.js';
 import MarketerCommissions from './marketer_commissions.js';
 import MarketerPointRedemptions from './marketer_point_redemptions.js';
@@ -44,6 +46,9 @@ import Users from './users.js';
 import Videos from './videos.js';
 import TokenBlacklist from './token_blacklist.js';
 import B2HConversionLogs from './b2hConversionLogs.js';
+import B2HWebhookEvents from './b2hWebhookEvents.js';
+import MpesaPaymentAttempts from './mpesaPaymentAttempts.js';
+import SupportTickets from './supportTickets.js';
 
 // Set up associations
 // Scheduler associations
@@ -265,6 +270,9 @@ const DB = {
 	AssignRights,
 	TokenBlacklist,
 	B2HConversionLogs,
+	B2HWebhookEvents,
+	MpesaPaymentAttempts,
+	SupportTickets,
 	ContactUs,
 	Grades,
 	GuestTracker,
@@ -273,6 +281,8 @@ const DB = {
 	LearningAreas,
 	LearningLevels,
 	LessonAccessLogs,
+	SubscriptionLessonUsage,
+	SubscriptionDeviceSession,
 	Lessons,
 	LessonSetting,
 	LessonTrack,
@@ -327,6 +337,8 @@ export type {
 	LessonSetting,
 	LessonTrack,
 	LessonAccessLogs,
+	SubscriptionLessonUsage,
+	SubscriptionDeviceSession,
 	Marketers,
 	MarketerCommissions,
 	MarketerPointRedemptions,

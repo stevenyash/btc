@@ -4,6 +4,7 @@ import Hls from "hls.js";
 import { toast } from "sonner";
 import { api } from "@/services/api";
 import { guestService, type Lesson } from "@/services/guest";
+import { getPlaybackDeviceId } from "@/services/playbackDevice";
 
 interface UseVideoStreamOptions {
   lesson: Lesson;
@@ -33,6 +34,7 @@ interface UseVideoStreamReturn {
   error: unknown | null;
   isRateLimited: boolean;
   retryAfter?: number;
+  retryStreamUrl: () => void;
 }
 
 export function useVideoStream({
@@ -51,10 +53,11 @@ export function useVideoStream({
 }: UseVideoStreamOptions): UseVideoStreamReturn {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const startHlsOnPlayRef = useRef<(() => void) | null>(null);
 
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [isHlsStream, setIsHlsStream] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [availableQualities, setAvailableQualities] = useState<
     Array<{ level: number; label: string; height: number; width: number }>
   >([]);
@@ -62,6 +65,7 @@ export function useVideoStream({
   const [error, setError] = useState<unknown | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [retryAfter, setRetryAfter] = useState<number | undefined>(undefined);
+  const [requestAttempt, setRequestAttempt] = useState(0);
 
   console.log('[useVideoStream] Hook initialized', {
     lessonId: lesson.id,
@@ -72,7 +76,7 @@ export function useVideoStream({
   // Track if we've attempted a refresh to avoid loops
   const refreshAttemptedRef = useRef(false);
   const refreshStreamUrlFnRef = useRef<(() => Promise<void>) | null>(null);
-  const initializeHlsFnRef = useRef<((url: string) => void) | undefined>(undefined);
+  const initializedStreamUrlRef = useRef<string | null>(null);
   const requestRetryCountRef = useRef(0);
   const rateLimitResetTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -96,6 +100,10 @@ export function useVideoStream({
       const video = videoRef.current;
 
       if (hlsRef.current) {
+        if (startHlsOnPlayRef.current) {
+          video.removeEventListener("play", startHlsOnPlayRef.current);
+          startHlsOnPlayRef.current = null;
+        }
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
@@ -149,10 +157,18 @@ export function useVideoStream({
           fragLoadingTimeOut: 20000,
           manifestLoadingTimeOut: 10000,
           levelLoadingTimeOut: 10000,
-          autoStartLoad: true,
+          autoStartLoad: false,
           pLoader: TokenLoader as any,
           fLoader: TokenLoader as any,
         });
+
+        const startLoadOnPlay = () => {
+          if (hlsRef.current === hls) {
+            hls.startLoad();
+          }
+        };
+        startHlsOnPlayRef.current = startLoadOnPlay;
+        video.addEventListener("play", startLoadOnPlay);
 
         hls.loadSource(videoUrl);
         hls.attachMedia(video);
@@ -161,7 +177,6 @@ export function useVideoStream({
           console.log('[useVideoStream] HLS manifest parsed');
           onReady?.();
           onStart?.();
-          video.play().catch((e) => console.warn("Playback failed to start:", e));
         });
 
         hls.on(Hls.Events.LEVELS_UPDATED, (_event: unknown, data: unknown) => {
@@ -278,20 +293,31 @@ export function useVideoStream({
           toast.error("Failed to load video stream");
         };
         video.addEventListener('error', handleError);
-        video.play().catch((e) => console.warn("Playback failed to start:", e));
       } else if (videoUrl.includes(".m3u8")) {
         // HLS but no Hls.js support and no native HLS - show error
         console.error('[useVideoStream] HLS not supported by browser');
         setError(new Error("HLS video streaming is not supported in your browser. Please use Chrome, Firefox, or Safari."));
         toast.error("Video format not supported. Try a different browser.");
         return;
-        } else {
+} else {
           // Non-HLS video (MP4, WebM, etc.)
           console.log('[useVideoStream] Non-HLS: setting video.src');
           video.src = videoUrl;
           video.addEventListener('loadedmetadata', () => {
-            console.log('[useVideoStream] Non-HLS loadedmetadata, duration:', video.duration);
+            console.log('[useVideoStream] Non-HLS loadedmetadata, duration:', video.duration, 'readyState:', video.readyState, 'networkState:', video.networkState);
             onReady?.();
+          });
+          video.addEventListener('loadstart', () => {
+            console.log('[useVideoStream] Non-HLS loadstart, networkState:', video.networkState);
+          });
+          video.addEventListener('progress', () => {
+            console.log('[useVideoStream] Non-HLS progress, buffered:', video.buffered.length > 0 ? video.buffered.end(0) : 0);
+          });
+          video.addEventListener('canplay', () => {
+            console.log('[useVideoStream] Non-HLS canplay');
+          });
+          video.addEventListener('canplaythrough', () => {
+            console.log('[useVideoStream] Non-HLS canplaythrough');
           });
           video.addEventListener('play', () => {
             console.log('[useVideoStream] Non-HLS play');
@@ -313,26 +339,31 @@ export function useVideoStream({
             console.log('[useVideoStream] Non-HLS ended');
             onEnded?.();
           });
+          video.addEventListener('stalled', () => {
+            console.log('[useVideoStream] Non-HLS stalled');
+          });
+          video.addEventListener('suspend', () => {
+            console.log('[useVideoStream] Non-HLS suspend');
+          });
+          video.addEventListener('abort', () => {
+            console.log('[useVideoStream] Non-HLS abort');
+          });
            const handleError = () => {
-             console.error('[useVideoStream] Non-HLS video error:', video.error);
-             onError?.(video.error);
-             toast.error("Failed to load video");
-           };
+              console.error('[useVideoStream] Non-HLS video error:', video.error);
+              console.error('[useVideoStream] Video error code:', video.error?.code);
+              console.error('[useVideoStream] Video currentSrc:', video.currentSrc);
+              console.error('[useVideoStream] Video networkState:', video.networkState);
+              console.error('[useVideoStream] Video readyState:', video.readyState);
+              onError?.(video.error);
+              toast.error("Failed to load video");
+            };
            video.addEventListener('error', handleError);
            console.log('[useVideoStream] Non-HLS event listeners attached');
-           // Attempt autoplay for non‑HLS videos
-           video.play().catch((e) => console.warn("Non-HLS playback failed to start:", e));
          }
 
-      initializeHlsFnRef.current = undefined;
     },
     [setAvailableQualities, setSelectedQuality, setError, onError, onReady, onStart, onPlay, onPlaying, onPause, onWaiting, onEnded]
   );
-
-  // Keep refs updated
-  useEffect(() => {
-    initializeHlsFnRef.current = initializeHls;
-  }, [initializeHls]);
 
   // Refresh stream URL (auth/token recovery) with rate limit handling
   const refreshStreamUrl = useCallback(async () => {
@@ -345,7 +376,7 @@ export function useVideoStream({
 
       if (isSubscriber) {
         const response = await api.get(`/lessons/stream-url/${lesson.id}`, {
-          params: { signed: "true" },
+          params: { signed: "true", device_id: getPlaybackDeviceId() },
         });
 
         // Handle rate limiting
@@ -360,6 +391,9 @@ export function useVideoStream({
         if (response.data.success && response.data.video_url) {
           videoUrl = response.data.video_url;
           isHls = response.data.is_hls || videoUrl.includes(".m3u8");
+          if (response.data.remaining_watch_time_seconds !== undefined) {
+            onMaxWatchTimeUpdate?.(response.data.remaining_watch_time_seconds);
+          }
         } else {
           toast.error("Failed to refresh video stream");
           return;
@@ -369,7 +403,7 @@ export function useVideoStream({
           toast.error("Phone number required");
           return;
         }
-         const result = await guestService.getStreamUrl(lesson.id, phone);
+         const result = await guestService.getStreamUrl(lesson.id, phone, getPlaybackDeviceId());
          if (result.success && result.video_url) {
            videoUrl = result.video_url;
            isHls = result.is_hls || videoUrl.includes(".m3u8");
@@ -391,18 +425,6 @@ export function useVideoStream({
         setStreamUrl(videoUrl);
         setIsHlsStream(isHls);
         refreshAttemptedRef.current = false;
-
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
-          hlsRef.current = null;
-        }
-
-        if (isHls) {
-          initializeHlsFnRef.current?.(videoUrl);
-        } else if (videoRef.current) {
-          videoRef.current.src = videoUrl;
-        }
-
         toast.success("Video stream refreshed");
       }
     } catch (err: any) {
@@ -436,6 +458,10 @@ export function useVideoStream({
       hlsRef.current = null;
     }
     if (videoRef.current) {
+      if (startHlsOnPlayRef.current) {
+        videoRef.current.removeEventListener("play", startHlsOnPlayRef.current);
+        startHlsOnPlayRef.current = null;
+      }
       videoRef.current.removeEventListener('loadedmetadata', () => onReady?.());
       videoRef.current.removeEventListener('play', () => onPlay?.());
       videoRef.current.removeEventListener('playing', () => onPlaying?.());
@@ -450,8 +476,20 @@ export function useVideoStream({
     requestRetryCountRef.current = 0;
   }, [onReady, onPlay, onPlaying, onPause, onWaiting, onEnded]);
 
+  const retryStreamUrl = useCallback(() => {
+    cleanup();
+    initializedStreamUrlRef.current = null;
+    setStreamUrl(null);
+    setIsHlsStream(false);
+    setError(null);
+    setIsLoading(true);
+    setRequestAttempt((attempt) => attempt + 1);
+  }, [cleanup]);
+
   // Fetch initial stream URL
   useEffect(() => {
+    const controller = new AbortController();
+
     console.log('[useVideoStream] Starting initial fetch for lesson', lesson.id, 'isSubscriber:', isSubscriber);
     const fetchStreamUrl = async () => {
       try {
@@ -461,17 +499,33 @@ export function useVideoStream({
         if (isSubscriber) {
           console.log('[useVideoStream] Subscriber: fetching stream URL');
           const response = await api.get(`/lessons/stream-url/${lesson.id}`, {
-            params: { signed: "true" },
+            params: { signed: "true", device_id: getPlaybackDeviceId() },
+            signal: controller.signal,
           });
 
+          if (controller.signal.aborted) return;
+
           if ((response as any).isRateLimit) {
-            // ... rate limit handling
+            const retryIn = (response as any).retryAfter;
+            setIsRateLimited(true);
+            setRetryAfter(retryIn);
+            setError(
+              new Error(
+                retryIn
+                  ? `Too many video requests. Try again in ${retryIn} seconds.`
+                  : "Too many video requests. Please try again shortly."
+              )
+            );
+            setIsLoading(false);
             return;
           }
 
           if (response.data.success && response.data.video_url) {
             videoUrl = response.data.video_url;
             isHls = response.data.is_hls || videoUrl.includes(".m3u8");
+            if (response.data.remaining_watch_time_seconds !== undefined) {
+              onMaxWatchTimeUpdate?.(response.data.remaining_watch_time_seconds);
+            }
             console.log('[useVideoStream] Subscriber stream URL received:', {
               videoUrl: videoUrl.substring(0, 80),
               isHls,
@@ -489,7 +543,14 @@ export function useVideoStream({
             return;
           }
           console.log('[useVideoStream] Guest: fetching stream URL');
-         const result = await guestService.getStreamUrl(lesson.id, phone);
+         const result = await guestService.getStreamUrl(
+           lesson.id,
+           phone,
+           getPlaybackDeviceId(),
+           controller.signal,
+         );
+         if (controller.signal.aborted) return;
+
          if (result.success && result.video_url) {
            videoUrl = result.video_url;
            isHls = result.is_hls || videoUrl.includes(".m3u8");
@@ -514,16 +575,27 @@ export function useVideoStream({
         setIsHlsStream(isHls);
         setIsLoading(false);
         console.log('[useVideoStream] State updated: streamUrl and isHlsStream set');
-      } catch (err) {
+      } catch (err: any) {
+        if (controller.signal.aborted) return;
+
         console.error('[useVideoStream] Error in fetchStreamUrl:', err);
         setError(err);
         onError?.(err);
+        const responseError = err?.response?.data?.error;
+        toast.error(
+          typeof responseError === 'string'
+            ? responseError
+            : err instanceof Error
+              ? err.message
+              : 'Failed to get video URL'
+        );
         setIsLoading(false);
       }
     };
 
     fetchStreamUrl();
-  }, [lesson.id, isSubscriber, phone, onError, onMaxWatchTimeUpdate]);
+    return () => controller.abort();
+  }, [lesson.id, isSubscriber, phone, onError, onMaxWatchTimeUpdate, requestAttempt]);
 
     // Initialize video element after streamUrl is set and video element is available
     useEffect(() => {
@@ -537,12 +609,15 @@ export function useVideoStream({
       }
 
       const initVideo = () => {
+        if (initializedStreamUrlRef.current === streamUrl) return;
+
         console.log('[useVideoStream] initVideo called, videoRef.current:', !!videoRef.current);
         if (!videoRef.current) {
           console.error("Video element not available yet");
           return;
         }
 
+        initializedStreamUrlRef.current = streamUrl;
         const video = videoRef.current;
         console.log('[useVideoStream] Video element found, current src:', video.src);
 
@@ -604,6 +679,7 @@ export function useVideoStream({
     error,
     isRateLimited,
     retryAfter,
+    retryStreamUrl,
   };
 }
 

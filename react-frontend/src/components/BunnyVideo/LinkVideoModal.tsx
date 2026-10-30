@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Search, CheckCircle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import type { BunnyVideo, Level, Grade, Area, Topic, Subtopic, LessonDetail } from '@/types/bunny-sync';
+import { Input } from '@/components/ui/input';
+import type { BunnyVideo, Level, Grade, Area, Topic, Subtopic } from '@/types/bunny-sync';
 
 interface LinkVideoModalProps {
   isOpen: boolean;
@@ -11,8 +13,6 @@ interface LinkVideoModalProps {
   onVideoSelect: (video: BunnyVideo) => void;
   linkModalVideoSearch: string;
   onLinkModalVideoSearchChange: (value: string) => void;
-  selectedLessonId: number | '';
-  onLessonSelect: (lessonId: number) => void;
   levels: Level[];
   grades: Grade[];
   areas: Area[];
@@ -28,7 +28,9 @@ interface LinkVideoModalProps {
   onAreaChange: (id: number | '') => void;
   onTopicChange: (id: number | '') => void;
   onSubtopicChange: (id: number | '') => void;
-  filteredLessons: LessonDetail[];
+  onCreateArea: (name: string) => Promise<'created' | 'existing'>;
+  onCreateTopic: (name: string) => Promise<'created' | 'existing'>;
+  onCreateSubtopic: (name: string) => Promise<'created' | 'existing'>;
   onLink: () => Promise<void>;
   isLinking: boolean;
   getTranscodingBadge: (status: string) => React.ReactNode;
@@ -42,8 +44,6 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
   onVideoSelect,
   linkModalVideoSearch,
   onLinkModalVideoSearchChange,
-  selectedLessonId,
-  onLessonSelect,
   levels,
   grades,
   areas,
@@ -59,11 +59,17 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
   onAreaChange,
   onTopicChange,
   onSubtopicChange,
-  filteredLessons,
+  onCreateArea,
+  onCreateTopic,
+  onCreateSubtopic,
   onLink,
   isLinking,
   getTranscodingBadge,
 }) => {
+  const [addingItem, setAddingItem] = useState<'area' | 'topic' | 'subtopic' | null>(null);
+  const [newItemName, setNewItemName] = useState('');
+  const [isCreatingItem, setIsCreatingItem] = useState(false);
+
   const unmappedVideos = useMemo(() => 
     bunnyVideos.filter(v => !v.mappedLesson),
     [bunnyVideos]
@@ -76,16 +82,74 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
     [unmappedVideos, linkModalVideoSearch]
   );
 
-  const selectedLesson = useMemo(
-    () => filteredLessons.find(l => l.id === selectedLessonId),
-    [filteredLessons, selectedLessonId]
-  );
-
   if (!isOpen) return null;
 
   const handleClose = () => {
+    setAddingItem(null);
+    setNewItemName('');
     onClose();
   };
+
+  const handleCreateItem = async () => {
+    const name = newItemName.trim();
+    if (!addingItem || !name || isCreatingItem) return;
+
+    setIsCreatingItem(true);
+    try {
+      const result = addingItem === 'area'
+        ? await onCreateArea(name)
+        : addingItem === 'topic'
+          ? await onCreateTopic(name)
+          : await onCreateSubtopic(name);
+      setAddingItem(null);
+      setNewItemName('');
+      toast.success(result === 'created' ? `${addingItem} added` : `Existing ${addingItem} selected`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to add hierarchy item');
+    } finally {
+      setIsCreatingItem(false);
+    }
+  };
+
+  const renderAddItemInput = (kind: 'area' | 'topic' | 'subtopic', label: string) =>
+    addingItem === kind ? (
+      <div className="mt-2 flex gap-2">
+        <Input
+          autoFocus
+          value={newItemName}
+          onChange={(event) => setNewItemName(event.target.value)}
+          placeholder={`New ${label.toLowerCase()} name`}
+          maxLength={255}
+          disabled={isCreatingItem}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              void handleCreateItem();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void handleCreateItem()}
+          disabled={!newItemName.trim() || isCreatingItem}
+        >
+          {isCreatingItem ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setAddingItem(null);
+            setNewItemName('');
+          }}
+          disabled={isCreatingItem}
+        >
+          Cancel
+        </Button>
+      </div>
+    ) : null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-auto">
@@ -167,7 +231,7 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
           {/* Divider */}
           <div className="border-t" />
 
-          {/* Select lesson with full hierarchy */}
+          {/* Select hierarchy for the lesson to be created */}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -180,7 +244,7 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
                   <option value="">Select level...</option>
                   {levels.map((level) => (
                     <option key={level.level_id} value={level.level_id}>
-                      {level.name}
+                      {level.name}{level.is_active === false ? ' (inactive)' : ''}
                     </option>
                   ))}
                 </select>
@@ -196,7 +260,7 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
                   <option value="">Select grade...</option>
                   {grades.map((grade) => (
                     <option key={grade.id} value={grade.id}>
-                      {grade.name}
+                      {grade.name}{grade.is_active === false ? ' (inactive)' : ''}
                     </option>
                   ))}
                 </select>
@@ -208,23 +272,41 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">Learning Area</label>
                 <select
                   value={selectedAreaId}
-                  onChange={(e) => onAreaChange(e.target.value ? Number(e.target.value) : '')}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') {
+                      setAddingItem('area');
+                      setNewItemName('');
+                    } else {
+                      setAddingItem(null);
+                      onAreaChange(e.target.value ? Number(e.target.value) : '');
+                    }
+                  }}
                   className="w-full p-2 border rounded-md text-sm"
                   disabled={!selectedGradeId}
                 >
                   <option value="">Select area...</option>
                   {areas.map((area) => (
                     <option key={area.id} value={area.id}>
-                      {area.name}
+                      {area.name}{area.is_active === false ? ' (inactive)' : ''}
                     </option>
                   ))}
+                  <option value="__add_new__">+ Add a new area...</option>
                 </select>
+                {renderAddItemInput('area', 'Area')}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Topic</label>
                 <select
                   value={selectedTopicId}
-                  onChange={(e) => onTopicChange(e.target.value ? Number(e.target.value) : '')}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') {
+                      setAddingItem('topic');
+                      setNewItemName('');
+                    } else {
+                      setAddingItem(null);
+                      onTopicChange(e.target.value ? Number(e.target.value) : '');
+                    }
+                  }}
                   className="w-full p-2 border rounded-md text-sm"
                   disabled={!selectedAreaId}
                 >
@@ -234,7 +316,9 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
                       {topic.name}
                     </option>
                   ))}
+                  <option value="__add_new__">+ Add a new topic...</option>
                 </select>
+                {renderAddItemInput('topic', 'Topic')}
               </div>
             </div>
 
@@ -243,7 +327,15 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subtopic</label>
                 <select
                   value={selectedSubtopicId}
-                  onChange={(e) => onSubtopicChange(e.target.value ? Number(e.target.value) : '')}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') {
+                      setAddingItem('subtopic');
+                      setNewItemName('');
+                    } else {
+                      setAddingItem(null);
+                      onSubtopicChange(e.target.value ? Number(e.target.value) : '');
+                    }
+                  }}
                   className="w-full p-2 border rounded-md text-sm"
                   disabled={!selectedTopicId}
                 >
@@ -253,42 +345,18 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
                       {subtopic.name}
                     </option>
                   ))}
+                  <option value="__add_new__">+ Add a new subtopic...</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lesson</label>
-                <select
-                  value={selectedLessonId}
-                  onChange={(e) => onLessonSelect(Number(e.target.value))}
-                  className="w-full p-2 border rounded-md text-sm"
-                  disabled={!selectedAreaId}
-                >
-                  <option value="">Select a lesson...</option>
-                  {filteredLessons.map((lesson) => (
-                    <option key={lesson.id} value={lesson.id}>
-                      {lesson.title} ({lesson.area} • {lesson.topic}{lesson.subtopic ? ` • ${lesson.subtopic}` : ''} • {lesson.duration}min • KES{lesson.price})
-                    </option>
-                  ))}
-                </select>
+                {renderAddItemInput('subtopic', 'Subtopic')}
               </div>
             </div>
+            {selectedVideo && (
+              <p className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
+                Linking will create a new lesson from this Bunny video's filename under the selected hierarchy.
+                {selectedSubtopicId ? '' : ' Subtopic is optional.'}
+              </p>
+            )}
           </div>
-
-          {/* Show selected lesson details */}
-          {selectedLesson && (
-            <div className="bg-gray-50 p-4 rounded space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div><strong>Level:</strong> {selectedLesson.level}</div>
-                <div><strong>Grade:</strong> {selectedLesson.grade}</div>
-                <div><strong>Area:</strong> {selectedLesson.area}</div>
-                <div><strong>Topic:</strong> {selectedLesson.topic}</div>
-                <div><strong>Subtopic:</strong> {selectedLesson.subtopic}</div>
-                <div><strong>Duration:</strong> {selectedLesson.duration} minutes</div>
-                <div><strong>Price:</strong> KES {selectedLesson.price}</div>
-                <div><strong>Preview:</strong> {selectedLesson.is_preview_available ? 'Yes' : 'No'}</div>
-              </div>
-            </div>
-          )}
 
           {selectedVideo && (
             <div className="bg-blue-50 p-4 rounded space-y-2 text-sm border border-blue-200">
@@ -305,13 +373,13 @@ export const LinkVideoModal: React.FC<LinkVideoModalProps> = ({
             </Button>
             <Button
               onClick={onLink}
-              disabled={!selectedVideo || !selectedLessonId || isLinking}
+              disabled={!selectedVideo || !selectedLevelId || !selectedGradeId || !selectedAreaId || !selectedTopicId || isLinking}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {isLinking ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Linking...</>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating lesson...</>
               ) : (
-                <><CheckCircle className="h-4 w-4 mr-2" /> Link Video</>
+                <><CheckCircle className="h-4 w-4 mr-2" /> Create Lesson & Link Video</>
               )}
             </Button>
           </div>

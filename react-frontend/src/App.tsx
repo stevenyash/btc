@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { api } from "./services/api"
 
 // Lazy-loaded pages
@@ -32,13 +32,12 @@ const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
 const AdminWithdrawalsPage = lazy(() => import('./pages/AdminWithdrawalsPage'))
 const AdminRolesPage = lazy(() => import('./pages/AdminRolesPage'))
 const AdminTransactionsPage = lazy(() => import('./pages/AdminTransactionsPage'))
+const AdminSupportTicketsPage = lazy(() => import('./pages/AdminSupportTicketsPage'))
 const AdminSubscriptionsPage = lazy(() => import('./pages/AdminSubscriptionsPage'))
-const BunnySyncAdminPage = lazy(() => import('./pages/BunnySyncAdminPage'))
+const BunnySyncAdminPage = lazy(() => import('./pages/BunnyVideoMapPage'))
 const BunnyUploadAdminPage = lazy(() => import('./pages/BunnyUploadAdminPage'))
 const GoToClassPage = lazy(() => import('./pages/GoToClassPage'))
-const GuestClassPage = lazy(() => import('./pages/GuestClassPage'))
 const WeekendTutorialsPage = lazy(() => import('./pages/WeekendTutorialsPage'))
-const SubscriberClassPage = lazy(() => import('./pages/SubscriberClassPage'))
 const AccountSettingsPage = lazy(() => import('./pages/AccountSettingsPage'))
 const PackageCheckoutPage = lazy(() => import('./pages/PackageCheckoutPage'))
 const SubscriptionCheckoutPage = lazy(() => import('./pages/SubscriptionCheckoutPage'))
@@ -176,6 +175,14 @@ function App() {
           }
         />
         <Route
+          path="/admin/support"
+          element={
+            <ProtectedRoute requireAuth requireRole="admin">
+              {withSuspense(AdminSupportTicketsPage)}
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/packages"
           element={
             <ProtectedRoute requireAuth requireRole="admin">
@@ -291,19 +298,11 @@ function App() {
         />
         <Route
           path="/subscriber-class"
-          element={
-            <ProtectedRoute requireAuth={false}>
-              {withSuspense(SubscriberClassPage)}
-            </ProtectedRoute>
-          }
+          element={<Navigate to="/gotoclass" replace />}
         />
         <Route
           path="/guest-class"
-          element={
-            <ProtectedRoute requireAuth={false}>
-              {withSuspense(GuestClassPage)}
-            </ProtectedRoute>
-          }
+          element={<Navigate to="/gotoclass" replace />}
         />
 
         {/* Weekend Tutorials - Public access */}
@@ -324,4 +323,3 @@ function App() {
 }
 
 export default App
-

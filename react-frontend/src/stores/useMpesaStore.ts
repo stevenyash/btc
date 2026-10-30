@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { isAxiosError } from "axios";
-import { api, publicApi } from "@/services/api";
+import { publicApi } from "@/services/api";
 
 export type MpesaStatus = "idle" | "loading" | "pending" | "success" | "error";
 
 export interface BusinessMetadata {
   [key: string]: unknown;
 }
+
+const GUEST_SESSION_STORAGE_KEY = "mpesa_guest_session_key";
 
 interface MpesaTransaction {
   checkoutRequestID: string;
@@ -16,6 +18,7 @@ interface MpesaTransaction {
   accountReference: string;
   businessMetadata?: BusinessMetadata;
   transactionID?: string;
+  guestSessionKey?: string;
 }
 
 interface MpesaState {
@@ -24,6 +27,7 @@ interface MpesaState {
   error: string | null;
   transaction: MpesaTransaction | null;
   pollInterval: NodeJS.Timeout | null;
+  guestSessionKey: string | null;
 
   pay: (
     amount: number,
@@ -38,11 +42,25 @@ interface MpesaState {
 
   reset: () => void;
 
-  activate: (checkoutRequestID: string, businessMetadata?: BusinessMetadata) => Promise<unknown>;
 }
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 20;
+
+const readStoredGuestSessionKey = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const stored = window.sessionStorage.getItem(GUEST_SESSION_STORAGE_KEY);
+  return stored && stored.length > 0 ? stored : null;
+};
+
+const writeStoredGuestSessionKey = (value: string | null): void => {
+  if (typeof window === "undefined") return;
+  if (value) {
+    window.sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, value);
+  } else {
+    window.sessionStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
+  }
+};
 
 export const useMpesaStore = create<MpesaState>((set, get) => ({
   status: "idle",
@@ -50,9 +68,10 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
   error: null,
   transaction: null,
   pollInterval: null,
+  guestSessionKey: readStoredGuestSessionKey(),
 
   pay: async (amount, phoneNumber, accountReference, businessMetadata) => {
-    set({ status: "loading", error: null, checkoutId: null, transaction: null });
+    set({ status: "loading", error: null, checkoutId: null, transaction: null, guestSessionKey: null });
 
     try {
       const digits = phoneNumber.replace(/\D/g, "");
@@ -75,9 +94,12 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
 
        if (response.data.success && response.data.checkoutRequestID) {
         const checkoutId = response.data.checkoutRequestID;
+        const nextGuestSessionKey = response.data.guestSessionKey || null;
+        writeStoredGuestSessionKey(nextGuestSessionKey);
         set({
           status: "pending",
           checkoutId,
+          guestSessionKey: nextGuestSessionKey,
         });
         console.log("Payment initiated, checkoutId:", checkoutId);
         return { success: true, checkoutId };
@@ -138,20 +160,24 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
         if (response.data.status === "success" || response.data.status === "completed") {
           isCancelled = true;
           const tx = response.data.transaction || response.data;
+          const currentGuestSessionKey = get().guestSessionKey ?? readStoredGuestSessionKey();
+          const completedTransaction: MpesaTransaction = {
+            checkoutRequestID: checkoutId,
+            status: "completed",
+            amount: tx.amount,
+            phoneNumber: tx.phoneNumber,
+            accountReference: tx.accountReference,
+            businessMetadata: tx.businessMetadata,
+            transactionID: tx.transactionID,
+            guestSessionKey: currentGuestSessionKey ?? undefined,
+          };
           set({
             status: "success",
-            transaction: {
-              checkoutRequestID: checkoutId,
-              status: "completed",
-              amount: tx.amount,
-              phoneNumber: tx.phoneNumber,
-              accountReference: tx.accountReference,
-              businessMetadata: tx.businessMetadata,
-              transactionID: tx.transactionID,
-            },
+            transaction: completedTransaction,
+            guestSessionKey: currentGuestSessionKey,
             pollInterval: null,
           });
-          return get().transaction;
+          return completedTransaction;
         }
 
         if (response.data.status === "failed") {
@@ -170,20 +196,24 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
         if (attempts >= MAX_POLL_ATTEMPTS) {
           isCancelled = true;
           set({
-            status: "error",
-            error: "Payment timeout. Please check your phone for the payment prompt.",
+            status: "pending",
+            error: "We’re still waiting for M-Pesa. Check your phone and try checking the status again.",
             pollInterval: null,
           });
           return null;
         }
 
         return null;
-      } catch (error) {
+      } catch {
         if (isCancelled) return null;
         attempts++;
         if (attempts >= MAX_POLL_ATTEMPTS) {
           isCancelled = true;
-          set({ status: "error", error: "Payment timeout. Please check your phone.", pollInterval: null });
+          set({
+            status: "pending",
+            error: "We couldn’t confirm the payment yet. You can safely check its status again.",
+            pollInterval: null,
+          });
           return null;
         }
         return null;
@@ -218,9 +248,11 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
     if (pollInterval) {
       clearInterval(pollInterval);
     }
+    writeStoredGuestSessionKey(null);
     set({
       transaction: null,
       pollInterval: null,
+      guestSessionKey: null,
     });
   },
 
@@ -229,25 +261,15 @@ export const useMpesaStore = create<MpesaState>((set, get) => ({
     if (pollInterval) {
       clearInterval(pollInterval);
     }
+    writeStoredGuestSessionKey(null);
     set({
       status: "idle",
       checkoutId: null,
       error: null,
       transaction: null,
       pollInterval: null,
+      guestSessionKey: null,
     });
   },
 
-  activate: async (checkoutRequestID: string, businessMetadata?: BusinessMetadata) => {
-    try {
-      const response = await api.post("/mpesa/manualactivate", {
-        checkoutRequestID,
-        ...businessMetadata,
-      });
-      return response.data;
-    } catch (error) {
-      console.error("Activation error:", error);
-      return null;
-    }
-  },
 }));

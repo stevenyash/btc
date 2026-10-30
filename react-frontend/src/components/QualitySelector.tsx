@@ -21,16 +21,19 @@ export function QualitySelector({
   }
 
   return (
-    <div className="flex items-center justify-center gap-2 py-3">
-      <span className="text-sm text-slate-400">Quality:</span>
-      <div className="flex gap-1">
+    <fieldset className="flex flex-wrap items-center gap-3" aria-label="Video quality">
+      <legend className="sr-only">Video quality</legend>
+      <span className="text-sm font-medium text-slate-300">Video quality</span>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Choose video quality">
         <button
+          type="button"
           onClick={() => onQualityChange(-1)}
+          aria-pressed={selectedQuality === -1}
           className={
-            "px-3 py-1 text-sm rounded " +
+            "min-h-11 rounded-lg border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 " +
             (selectedQuality === -1
-              ? "bg-blue-600 text-white"
-              : "bg-slate-700 text-slate-300 hover:bg-slate-600")
+              ? "border-sky-400 bg-sky-400/15 text-sky-200"
+              : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:bg-slate-800")
           }
         >
           Auto
@@ -38,19 +41,22 @@ export function QualitySelector({
         {qualities.map((q) => (
           <button
             key={q.level}
+            type="button"
             onClick={() => onQualityChange(q.level)}
+            aria-pressed={selectedQuality === q.level}
+            aria-label={`Play at ${q.label}`}
             className={
-              "px-3 py-1 text-sm rounded " +
+              "min-h-11 rounded-lg border px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 " +
               (selectedQuality === q.level
-                ? "bg-blue-600 text-white"
-                : "bg-slate-700 text-slate-300 hover:bg-slate-600")
-             }
-           >
-             {q.label}
-           </button>
+                ? "border-sky-400 bg-sky-400/15 text-sky-200"
+                : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:bg-slate-800")
+            }
+          >
+            {q.label}
+          </button>
         ))}
       </div>
-    </div>
+    </fieldset>
   );
 }
 

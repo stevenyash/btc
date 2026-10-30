@@ -63,7 +63,9 @@ export const useGuestStore = create<GuestState>()(
       isLoading: false,
       error: null,
 
-      setPhone: (phone) => set({ phone }),
+      setPhone: (phone) => set((state) => phone === state.phone
+        ? { phone }
+        : { phone, purchaseStatuses: new Map() }),
       setVerified: (verified) => set({ isVerified: verified }),
       setSelectedLevel: (level) => {
         set({ selectedLevel: level, selectedGrade: null, selectedArea: null, lessons: [] });

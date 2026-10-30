@@ -26,6 +26,7 @@ export interface PackageDetails {
   };
   concurrent_access: number;
   no_of_lessons: number;
+  watch_time_minutes: number;
   duration_amount: number;
   duration_unit: string;
   fee: number;
@@ -36,6 +37,8 @@ export interface SubscriberDetails {
     lessons_viewed: number;
     lesson_balance: number;
     total_lessons: number;
+    remaining_watch_time_seconds: number;
+    total_watch_time_seconds: number;
     status: string;
     package_id: number;
   };
@@ -72,13 +75,14 @@ export interface SubscriptionPlan {
 export interface UpdateLessonBalanceRequest {
   lessonId: number;
   watchTimeSeconds: number;
+  deviceId: string;
 }
 
 export interface UpdateLessonBalanceResponse {
   success: boolean;
-  previous_balance: number;
-  new_balance: number;
-  credits_deducted: number;
+  remaining_watch_time_seconds: number;
+  lessons_used: number;
+  total_lessons: number;
   exhausted: boolean;
 }
 

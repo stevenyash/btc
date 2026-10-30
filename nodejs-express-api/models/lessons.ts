@@ -15,6 +15,11 @@ interface LessonsAttributes {
 	transcoding_status: 'pending' | 'processing' | 'completed' | 'failed';
 	mp4_urls: string | null;
 	video_guid: string | null;
+	encode_progress: number | null;
+	views: number | null;
+	date_uploaded: Date | null;
+	preview_url: string | null;
+	collection_id: string | null;
 	file: string | null;
 	filename: string | null;
 	file_size: number | null;
@@ -51,6 +56,11 @@ class Lessons extends BaseModel<LessonsAttributes, LessonsCreationAttributes>
 				transcoding_status: { type: DataTypes.ENUM('pending', 'processing', 'completed', 'failed'), defaultValue: 'pending' },
 				mp4_urls: { type: DataTypes.TEXT },
 				video_guid: { type: DataTypes.STRING },
+				encode_progress: { type: DataTypes.INTEGER, defaultValue: 0 },
+				views: { type: DataTypes.INTEGER, defaultValue: 0 },
+				date_uploaded: { type: DataTypes.DATE },
+				preview_url: { type: DataTypes.STRING },
+				collection_id: { type: DataTypes.STRING },
 				file: { type: DataTypes.STRING },
 				filename: { type: DataTypes.STRING },
 				file_size: { type: DataTypes.BIGINT },
@@ -71,15 +81,15 @@ class Lessons extends BaseModel<LessonsAttributes, LessonsCreationAttributes>
 	}
 
 	static listFields(): string[] {
-		return ["id", "area_id", "topic_id", "subtopic_id", "title", "description", "s3_key", "s3_url", "storage_path", "bunny_url", "bunny_video_id", "transcoding_status", "mp4_urls", "video_guid", "file", "filename", "file_size", "duration", "thumbnail_url", "primary_thumbnail", "price", "is_preview_available", "preview_duration", "is_active"];
+		return ["id", "area_id", "topic_id", "subtopic_id", "title", "description", "s3_key", "s3_url", "storage_path", "bunny_url", "bunny_video_id", "transcoding_status", "mp4_urls", "video_guid", "encode_progress", "views", "date_uploaded", "preview_url", "collection_id", "file", "filename", "file_size", "duration", "thumbnail_url", "primary_thumbnail", "price", "is_preview_available", "preview_duration", "is_active"];
 	}
 
 	static viewFields(): string[] {
-		return ["id", "area_id", "topic_id", "subtopic_id", "title", "description", "s3_key", "s3_url", "storage_path", "bunny_url", "bunny_video_id", "transcoding_status", "mp4_urls", "video_guid", "file", "filename", "file_size", "duration", "thumbnail_url", "primary_thumbnail", "price", "is_preview_available", "preview_duration", "is_active"];
+		return ["id", "area_id", "topic_id", "subtopic_id", "title", "description", "s3_key", "s3_url", "storage_path", "bunny_url", "bunny_video_id", "transcoding_status", "mp4_urls", "video_guid", "encode_progress", "views", "date_uploaded", "preview_url", "collection_id", "file", "filename", "file_size", "duration", "thumbnail_url", "primary_thumbnail", "price", "is_preview_available", "preview_duration", "is_active"];
 	}
 
 	static editFields(): string[] {
-		return ["id", "area_id", "topic_id", "subtopic_id", "title", "description", "s3_key", "s3_url", "storage_path", "bunny_url", "bunny_video_id", "transcoding_status", "mp4_urls", "video_guid", "file_size", "file", "filename", "duration", "thumbnail_url", "primary_thumbnail", "price", "is_preview_available", "preview_duration", "is_active"];
+		return ["id", "area_id", "topic_id", "subtopic_id", "title", "description", "s3_key", "s3_url", "storage_path", "bunny_url", "bunny_video_id", "transcoding_status", "mp4_urls", "video_guid", "encode_progress", "views", "date_uploaded", "preview_url", "collection_id", "file_size", "file", "filename", "duration", "thumbnail_url", "primary_thumbnail", "price", "is_preview_available", "preview_duration", "is_active"];
 	}
 
 	static searchFields(): (string | ReturnType<typeof sequelize.literal>)[] {

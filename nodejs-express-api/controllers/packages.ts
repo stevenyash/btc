@@ -106,6 +106,7 @@ router.post('/add', [
   body('concurrent_access').not().isEmpty().isNumeric(),
   body('created_at').not().isEmpty(),
   body('no_of_lessons').not().isEmpty().isNumeric(),
+  body('watch_time_minutes').not().isEmpty().isInt({ min: 1 }),
   body('duration_amount').not().isEmpty().isNumeric(),
   body('duration_unit').not().isEmpty(),
 ], validateFormData as any, async (req: Request, res: Response) => {
@@ -125,6 +126,7 @@ router.post('/edit/:recid', [
   body('fee').optional({ nullable: true }).not().isEmpty().isNumeric(),
   body('concurrent_access').optional({ nullable: true }).not().isEmpty().isNumeric(),
   body('no_of_lessons').optional({ nullable: true }).not().isEmpty().isNumeric(),
+  body('watch_time_minutes').optional({ nullable: true }).isInt({ min: 1 }),
   body('duration_amount').optional({ nullable: true }).not().isEmpty().isNumeric(),
   body('duration_unit').optional({ nullable: true }).not().isEmpty(),
 ], validateFormData as any, async (req: Request, res: Response) => {
@@ -189,4 +191,3 @@ async function getPreviousRecordId(recid: number) {
 }
 
 export default router;
-

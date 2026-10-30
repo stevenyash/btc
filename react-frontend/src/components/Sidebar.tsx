@@ -1,7 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
 import {
-  Menu,
   X,
   User,
   LogOut,
@@ -21,11 +20,14 @@ import {
   ChevronRight,
   Users,
   CreditCard,
+  MessageCircle,
   FileSpreadsheet,
   ScrollText,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  Video
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/stores/useAuthStore"
 import { useRole } from "@/hooks/useRole"
@@ -40,12 +42,21 @@ const APP_NAME = "Bits Tutor Connect"
 export function Sidebar({ className }: SidebarProps) {
   const { user, logout, hasPermission } = useAuthStore()
   const { isAdmin, isMarketer, isSub, isSuperadmin } = useRole()
-  const { sidebarCollapsed, toggleSidebar } = useUIStore()
+  const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore()
   const navigate = useNavigate()
   const location = useLocation()
-  const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['main'])
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mobileSidebarOpen])
 
   const userName = user?.username || "User"
   const userRole = user?.role || user?.role_name || ""
@@ -68,12 +79,14 @@ export function Sidebar({ className }: SidebarProps) {
     { label: "Dashboard", path: "/admin", icon: BarChart3 },
     { label: "Manage Users", path: "/admin/users", permission: "users.list", icon: Users },
     { label: "Transactions", path: "/admin/transactions", permission: "transactions.list", icon: CreditCard },
+    { label: "Client Support", path: "/admin/support", icon: MessageCircle },
     { label: "Packages", path: "/admin/packages", permission: "packages.list", icon: Package },
     { label: "Subscriptions", path: "/admin/subscriptions", permission: "subscriptions.list", icon: ScrollText },
     { label: "Marketers", path: "/admin/marketers", permission: "marketers.list", icon: Users },
     { label: "Withdrawals", path: "/admin/withdrawals", icon: DollarSign },
     { label: "Lessons", path: "/admin/lessons", permission: "lessons.list", icon: FileSpreadsheet },
     { label: "Learning Hierarchy", path: "/admin/learning-hierarchy", icon: GraduationCap },
+    { label: "Bunny Video Sync", path: "/admin/bunny-sync", icon: Video },
   ]
 
   const adminMenus = isAdmin || isSuperadmin ? allAdminMenus.filter(menu => !menu.permission || hasPermission(menu.permission)) : []
@@ -101,13 +114,13 @@ export function Sidebar({ className }: SidebarProps) {
     navigate("/")
   }
 
-  const NavLink = ({ item }: { item: { label: string; path: string; icon?: any } }) => {
+  const NavLink = ({ item }: { item: { label: string; path: string; icon?: LucideIcon } }) => {
     const Icon = item.icon
     const isActive = location.pathname === item.path
     return (
       <Link
         to={item.path}
-        onClick={() => setMobileOpen(false)}
+        onClick={() => setMobileSidebarOpen(false)}
         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
           isActive
             ? "bg-primary text-primary-foreground font-medium"
@@ -270,27 +283,26 @@ export function Sidebar({ className }: SidebarProps) {
       </aside>
 
       {/* Mobile Sidebar Overlay */}
-      {mobileOpen && (
+      {mobileSidebarOpen && (
         <div
           className="md:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setMobileOpen(false)}
+          onClick={() => setMobileSidebarOpen(false)}
         />
       )}
 
       {/* Mobile Sidebar */}
-      <aside className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white border-r shadow-lg transform transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white border-r shadow-lg transform transition-transform duration-300 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <SidebarContent />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Close navigation menu"
+          className="absolute right-3 top-3"
+          onClick={() => setMobileSidebarOpen(false)}
+        >
+          <X className="h-5 w-5" />
+        </Button>
       </aside>
-
-      {/* Mobile Toggle Button */}
-      <Button
-        variant="outline"
-        size="icon"
-        className="md:hidden fixed bottom-4 right-4 z-50 rounded-full shadow-lg"
-        onClick={() => setMobileOpen(!mobileOpen)}
-      >
-        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </Button>
     </>
   )
 }

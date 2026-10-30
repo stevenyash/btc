@@ -5,10 +5,17 @@ import DB from '../models/db.js';
 import uploader from '../helpers/uploader.js';
 import BunnyHelper from '../helpers/bunnyHelper.js';
 import bunnyService from '../services/bunnyService.js';
+import bunnyConfig from '../config/bunny.js';
 import { validateLessonAccess, canStreamLesson } from '../middleware/validateLessonAccess.js';
 import { streamLimiter, generalLimiter, uploadLimiter } from '../middleware/rateLimiters.js';
 import jwt from 'jsonwebtoken';
 import utils from '../helpers/utils.js';
+import {
+  LessonAccessLimitError,
+  heartbeatSubscriberDevice,
+  recordSubscriberWatchTime,
+  releaseSubscriberDevice,
+} from '../services/classAccessService.js';
 
 const router = Router();
 
@@ -65,71 +72,89 @@ router.post('/update-balance', async (req: Request, res: Response) => {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const { lessonId, watchTimeSeconds } = req.body;
-
-      if (!lessonId || watchTimeSeconds === undefined || watchTimeSeconds <= 0) {
-        return res.status(400).json({ error: 'lessonId and positive watchTimeSeconds are required' });
+      if (req.isAdmin || req.isSuperadmin) {
+        return res.json({ success: true, unmetered: true });
       }
 
-      // Get lesson duration from settings to convert watch time to credits
-      const lessonSetting = await DB.LessonSetting.findOne({
-        where: { subscription_type: 'subscribed' },
-        attributes: ['duration']
-      });
+      const { lessonId, watchTimeSeconds, deviceId } = req.body;
 
-      const durationPerCreditMinutes = lessonSetting ? Number(lessonSetting.duration) : 90;
-      const durationPerCreditSeconds = durationPerCreditMinutes * 60;
-
-      // Calculate credits to deduct (fractional based on actual watch time)
-      const creditsToDeduct = watchTimeSeconds / durationPerCreditSeconds;
-
-      // Get current lesson track
-      const lessonTrack = await DB.LessonTrack.findOne({
-        where: {
-          user_id: req.user.id,
-          status: 'active'
-        }
-      });
-
-      if (!lessonTrack || !lessonTrack.lesson_balance || lessonTrack.lesson_balance <= 0) {
-        return res.status(403).json({
-          error: 'No active subscription or lesson balance exhausted',
-          balance: 0,
-          exhausted: true
-        });
+      if (!Number.isInteger(Number(lessonId)) || Number(lessonId) <= 0 ||
+          !Number.isFinite(Number(watchTimeSeconds)) || Number(watchTimeSeconds) <= 0 ||
+          Number(watchTimeSeconds) > 300 ||
+          typeof deviceId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId)) {
+        return res.status(400).json({ error: 'Valid lessonId, deviceId, and watchTimeSeconds (1-300) are required' });
       }
 
-      // Calculate new balance (minimum 0)
-      const currentBalance = lessonTrack.lesson_balance;
-      const newBalance = Math.max(0, currentBalance - creditsToDeduct);
-
-      // Update lesson track
-      await DB.LessonTrack.update(
-        {
-          lesson_balance: newBalance,
-          lessons_viewed: (lessonTrack.lessons_viewed || 0) + 1,
-          last_accessed: new Date(),
-          status: newBalance <= 0 ? 'exhausted' : 'active'
-        },
-        {
-          where: { id: lessonTrack.id }
-        }
+      const result = await recordSubscriberWatchTime(
+        Number(req.user.id),
+        Number(lessonId),
+        Math.floor(Number(watchTimeSeconds)),
+        deviceId
       );
-
-      console.log(`[Lesson Balance] User ${req.user.id} watched ${lessonId} for ${watchTimeSeconds}s, deducted ${creditsToDeduct.toFixed(4)} credits. Balance: ${currentBalance} -> ${newBalance.toFixed(4)}`);
 
       return res.json({
         success: true,
-        previous_balance: currentBalance,
-        new_balance: newBalance,
-        credits_deducted: creditsToDeduct,
-        exhausted: newBalance <= 0
+        remaining_watch_time_seconds: result.remainingWatchTimeSeconds,
+        lessons_used: result.lessonsUsed,
+        total_lessons: result.totalLessons,
+        exhausted: result.remainingWatchTimeSeconds <= 0,
       });
     } catch (error: any) {
+      if (error instanceof LessonAccessLimitError) {
+        return res.status(403).json({ error: error.message, code: error.code, details: error.details });
+      }
       console.error('Error updating lesson balance:', error);
       return res.status(500).json({ error: error.message });
     }
   });
+
+router.get('/access/:recid', validateLessonAccess, (req: Request, res: Response) => {
+  const access = (req as any).lessonAccess;
+  return res.json({
+    success: true,
+    access_mode: access?.accessMode || 'preview',
+    remaining_watch_time_seconds: access?.maxWatchTime ?? null,
+    lesson_track_id: access?.lessonTrackId ?? null,
+  });
+});
+
+router.delete('/device-session', async (req: Request, res: Response) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const deviceId = req.body?.device_id;
+  if (typeof deviceId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId)) {
+    return res.status(400).json({ error: 'Valid device_id is required' });
+  }
+  try {
+    await releaseSubscriberDevice(Number(req.user.id), deviceId);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to release playback device:', error);
+    return res.status(500).json({ error: 'Failed to release playback device' });
+  }
+});
+
+router.post('/device-session/heartbeat', async (req: Request, res: Response) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const { device_id: deviceId, lesson_id: lessonId } = req.body || {};
+  if (typeof deviceId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId) ||
+      !Number.isInteger(Number(lessonId)) || Number(lessonId) <= 0) {
+    return res.status(400).json({ error: 'Valid device_id and lesson_id are required' });
+  }
+  try {
+    await heartbeatSubscriberDevice(Number(req.user.id), deviceId, Number(lessonId));
+    return res.json({ success: true });
+  } catch (error) {
+    if (error instanceof LessonAccessLimitError) {
+      return res.status(403).json({ error: error.message, code: error.code, details: error.details });
+    }
+    console.error('Failed to refresh playback device session:', error);
+    return res.status(500).json({ error: 'Failed to refresh playback device session' });
+  }
+});
 
 router.use(generalLimiter);
 
@@ -247,18 +272,12 @@ router.get('/view/:recid', async (req: Request, res: Response) => {
 
      const recordData = record.toJSON();
      const videoId = recordData.bunny_video_id;
-     const storagePath = recordData.storage_path || recordData.s3_key;
 
      if (videoId) {
-       // Use BunnyHelper for secure URLs (though view endpoint might not need security)
        const videoResult = BunnyHelper.getSecureVideoUrl(videoId, {}, false);
        const hlsResult = BunnyHelper.getSecureVideoUrl(videoId, {}, true);
-       
        recordData.video_url = videoResult.url;
        recordData.hls_url = hlsResult.url;
-     } else if (storagePath) {
-       const storageResult = BunnyHelper.getSecureStorageUrl(storagePath);
-       recordData.video_url = storageResult.url;
      }
 
      return res.json(recordData);
@@ -293,10 +312,12 @@ router.get('/stream-url/:recid', streamLimiter, validateLessonAccess, async (req
 
      const recordData = record.toJSON();
      const videoId = recordData.bunny_video_id;
-     const storagePath = recordData.storage_path || recordData.s3_key;
-
-     if (!videoId && !storagePath) {
-       return res.status(400).json({ error: 'Lesson video not available' });
+     if (!videoId || recordData.transcoding_status !== 'completed') {
+       return res.status(409).json({
+         success: false,
+         error: 'Lesson is not synced and ready in Bunny yet',
+         code: 'BUNNY_VIDEO_NOT_SYNCED',
+       });
      }
 
       const user_id = req.user?.id?.toString() || req.query.user_id || 'guest';
@@ -311,60 +332,80 @@ router.get('/stream-url/:recid', streamLimiter, validateLessonAccess, async (req
                                rawClientIp?.startsWith('172.');
       const clientIp = isLocalOrPrivate ? undefined : rawClientIp;
 
-     let videoUrl: string;
-     let isHls = false;
-     let hlsUrl: string | null = null;
+let videoUrl: string;
+      let isHls = false;
+      let hlsUrl: string | null = null;
 
       if (videoId) {
-       // Use BunnyHelper for secure HLS URL with directory token for segment inheritance
-       const hlsResult = BunnyHelper.getSecureVideoUrl(videoId, {
-         expiresIn: expiresInNum,
-         userIp: clientIp
-       }, true);
-       
-       videoUrl = hlsResult.url;
-       hlsUrl = hlsResult.hlsUrl;
-       isHls = true;
-       
-       console.log('[DEBUG] HLS video - videoId:', videoId, 'hlsUrl:', hlsUrl, 'token:', hlsResult.token ? 'generated' : 'not configured');
-      } else {
-        // For storage-based videos, use BunnyHelper for secure URL
-        const storageResult = BunnyHelper.getSecureStorageUrl(storagePath, {
-          expiresIn: expiresInNum
-        });
-        
-        videoUrl = storageResult.url;
-        console.log('[DEBUG] Non-HLS video - storagePath:', storagePath, 'videoUrl:', videoUrl);
-       }
-
-      let lesson_balance: number | undefined = undefined;
-      if (!req.user) {
-        const setting = await DB.LessonSetting.findOne({
-          where: { subscription_type: 'non_subscribed' },
-          attributes: ['duration']
-        });
-        // duration is stored as string, convert to number of minutes, then *60 for seconds
-        const durationMinutes = setting ? Number(setting.duration) : 90; // fallback 90 min
-        lesson_balance = durationMinutes * 60;
-        console.log('[DEBUG] Guest lesson_balance computed:', lesson_balance, 'from duration:', durationMinutes);
-      } else {
-        // For subscribers, check if they have lesson balance (from lesson_track)
-        const lessonTrack = await DB.LessonTrack.findOne({
-          where: { 
-            user_id: req.user.id,
-            status: 'active'
-          }
-        });
-        if (lessonTrack && lessonTrack.lesson_balance && lessonTrack.lesson_balance > 0) {
-          // Each credit = 90 minutes of watch time
-          lesson_balance = lessonTrack.lesson_balance * 90 * 60;
-          console.log('[DEBUG] Subscriber lesson_balance:', lesson_balance, 'from balance:', lessonTrack.lesson_balance);
-        } else {
-          console.log('[DEBUG] Subscriber has no lesson balance');
+        let playData;
+        try {
+          playData = await bunnyService.getVideoPlayData(videoId, expiresInNum);
+        } catch (bunnyError: any) {
+          console.error('[ERROR] Failed to retrieve Bunny playback data:', {
+            lessonId: recid,
+            videoId,
+            error: bunnyError instanceof Error ? bunnyError.message : String(bunnyError),
+          });
+          return res.status(502).json({
+            success: false,
+            error: 'Unable to retrieve Bunny playback data',
+            code: 'BUNNY_PLAYBACK_DATA_UNAVAILABLE',
+          });
         }
+
+        if (!playData.isPlayable) {
+          return res.status(503).json({
+            success: false,
+            error: 'Bunny video is not playable yet',
+            code: 'BUNNY_VIDEO_NOT_PLAYABLE',
+          });
+        }
+
+        const playbackUrl = playData.isPlaylistPlayable && playData.videoPlaylistUrl
+          ? playData.videoPlaylistUrl
+          : playData.originalUrl;
+        if (!playbackUrl) {
+          return res.status(503).json({
+            success: false,
+            error: 'Bunny did not provide a playable video URL',
+            code: 'BUNNY_PLAYBACK_URL_MISSING',
+          });
+        }
+
+        const signedUrl = new URL(playbackUrl);
+        if (playData.tokenAuthEnabled) {
+          if (!bunnyConfig.pullZoneSecurityKey) {
+            return res.status(503).json({ error: 'Bunny CDN token authentication is enabled but its security key is not configured' });
+          }
+
+          const tokenPath = `/${videoId}/`;
+          const tokenQuery = bunnyService.generateAdvancedToken(tokenPath, {
+            expiresIn: expiresInNum,
+            tokenPath,
+            ignoreParams: true,
+            userIp: clientIp,
+          });
+          new URLSearchParams(tokenQuery).forEach((value, key) => {
+            signedUrl.searchParams.set(key, value);
+          });
+        }
+
+        videoUrl = signedUrl.toString();
+        isHls = playbackUrl === playData.videoPlaylistUrl;
+        hlsUrl = isHls ? videoUrl : null;
+        console.log('[DEBUG] Bunny playback data resolved:', {
+          videoId,
+          isPlayable: playData.isPlayable,
+          isPlaylistPlayable: playData.isPlaylistPlayable,
+          tokenAuthEnabled: playData.tokenAuthEnabled,
+          isHls,
+        });
       }
 
-      console.log('[DEBUG] Returning response - video_url:', videoUrl, 'is_hls:', isHls, 'lesson_balance:', lesson_balance);
+      const lessonAccess = (req as any).lessonAccess;
+      const lesson_balance = lessonAccess?.maxWatchTime;
+
+      console.log('[DEBUG] Returning stream response - URL generated:', Boolean(videoUrl), 'is_hls:', isHls, 'lesson_balance:', lesson_balance);
 
       return res.json({
         success: true,
@@ -379,6 +420,8 @@ router.get('/stream-url/:recid', streamLimiter, validateLessonAccess, async (req
         subtopic: recordData.subtopic?.name,
         expires_in: expiresInNum,
         lesson_balance,
+        remaining_watch_time_seconds: lesson_balance,
+        access_mode: lessonAccess?.accessMode || 'preview',
       });
    } catch (err) {
      console.error('Error in stream-url:', err);

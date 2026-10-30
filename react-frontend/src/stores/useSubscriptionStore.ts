@@ -19,6 +19,8 @@ interface SubscriptionState {
   lessonBalance: number;
   lessonsViewed: number;
   totalLessons: number;
+  remainingWatchTimeSeconds: number;
+  totalWatchTimeSeconds: number;
   subscriptionStatus: string;
   hasActiveSubscription: boolean;
 
@@ -45,6 +47,8 @@ export const useSubscriptionStore = create<SubscriptionState>()(
       lessonBalance: 0,
       lessonsViewed: 0,
       totalLessons: 0,
+      remainingWatchTimeSeconds: 0,
+      totalWatchTimeSeconds: 0,
       subscriptionStatus: "inactive",
       hasActiveSubscription: false,
 
@@ -64,6 +68,8 @@ export const useSubscriptionStore = create<SubscriptionState>()(
               lessonsViewed: lessontrack.lessons_viewed || 0,
               lessonBalance: lessontrack.lesson_balance || 0,
               totalLessons: lessontrack.total_lessons || 0,
+              remainingWatchTimeSeconds: Number(lessontrack.remaining_watch_time_seconds || 0),
+              totalWatchTimeSeconds: Number(lessontrack.total_watch_time_seconds || 0),
               subscriptionStatus: lessontrack.status || "inactive",
             });
           }
@@ -196,6 +202,8 @@ export const useSubscriptionStore = create<SubscriptionState>()(
           lessonBalance: 0,
           lessonsViewed: 0,
           totalLessons: 0,
+          remainingWatchTimeSeconds: 0,
+          totalWatchTimeSeconds: 0,
           subscriptionStatus: "inactive",
           hasActiveSubscription: false,
         });

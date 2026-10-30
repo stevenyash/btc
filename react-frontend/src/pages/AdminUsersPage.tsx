@@ -195,18 +195,18 @@ export default function AdminUsersPage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="text-white">
-              <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                <Users className="h-8 w-8" />
+              <h1 className="mb-2 flex items-center gap-3 text-2xl font-bold sm:text-3xl">
+                <Users className="h-6 w-6 flex-shrink-0 sm:h-8 sm:w-8" />
                 User Management
               </h1>
               <p className="text-slate-300">
                 Manage all registered users on the platform
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full flex-wrap gap-2 md:w-auto">
                <Button 
                  variant="outline" 
-                 className="bg-white text-slate-800 hover:bg-slate-100"
+                 className="flex-1 bg-white text-slate-800 hover:bg-slate-100 sm:flex-none"
                  onClick={() => navigate("/admin")}
                >
                  Back to Dashboard
@@ -214,7 +214,7 @@ export default function AdminUsersPage() {
               <CanI action="add" resource="users">
                   {can => can && (
                     <Button 
-                      className="bg-green-600 hover:bg-green-700 text-white"
+                      className="flex-1 bg-green-600 text-white hover:bg-green-700 sm:flex-none"
                       onClick={() => setIsCreateModalOpen(true)}
                     >
                       <UserPlus className="mr-2 h-4 w-4" />
@@ -224,7 +224,7 @@ export default function AdminUsersPage() {
               </CanI>
                 <Button 
                   variant="outline" 
-                  className="bg-white text-slate-800 hover:bg-slate-100"
+                  className="flex-1 bg-white text-slate-800 hover:bg-slate-100 sm:flex-none"
                   onClick={async () => {
                     setIsLoading(true)
                     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { 
   DollarSign, 
   Wallet, 
@@ -24,7 +24,7 @@ export default function MarketerWithdrawPage() {
   const navigate = useNavigate()
   const { earningsSummary, fetchEarningsSummary } = useMarketerStore()
 
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
@@ -32,14 +32,14 @@ export default function MarketerWithdrawPage() {
   const [withdrawStatus, setWithdrawStatus] = useState<"idle" | "pending" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState("")
 
-  const fetchWithdrawalHistory = async () => {
+  const fetchWithdrawalHistory = useCallback(async () => {
     try {
       const result = await marketerService.getWithdrawalHistory()
       setWithdrawalHistory(result)
     } catch (error) {
       console.error("Failed to fetch withdrawal history:", error)
     }
-  }
+  }, [])
 
   const handleWithdraw = async () => {
     if (!phoneNumber || !withdrawAmount) return
@@ -65,9 +65,9 @@ export default function MarketerWithdrawPage() {
       } else {
         throw new Error(result.error || "Failed to initiate withdrawal")
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setWithdrawStatus("error")
-      const errorMsg = error.message || "Failed to initiate withdrawal"
+      const errorMsg = error instanceof Error ? error.message : "Failed to initiate withdrawal"
       setErrorMessage(errorMsg)
       toast.error(errorMsg)
     } finally {
@@ -129,7 +129,6 @@ export default function MarketerWithdrawPage() {
   }
 
   useEffect(() => {
-    setIsLoading(true)
     Promise.all([
       fetchEarningsSummary(),
       fetchWithdrawalHistory()

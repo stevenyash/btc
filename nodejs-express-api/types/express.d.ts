@@ -18,5 +18,6 @@ declare module 'express' {
     isTeacher?: boolean;
     isSuperadmin?: boolean;
     isGuest?: boolean;
+    guestPhone?: string;
   }
 }

@@ -5,6 +5,7 @@ import MpesaController from '../../controllers/mpesa.js';
 import AuthController from '../../controllers/auth.js';
 import AdminRolesController from '../../controllers/adminRoles.js';
 import AdminController from '../../controllers/adminController.js';
+import SupportTicketsController from '../../controllers/supportTickets.js';
 import HomeController from '../../controllers/home.js';
 import AccountController from '../../controllers/account.js';
 import LearningHierarchyRoutes from '../../routes/learningHierarchyRoutes.js';
@@ -41,7 +42,6 @@ import BunnySyncController from '../../controllers/bunnySyncController.js';
 import BunnyUploadController from '../../controllers/bunnyUploadController.js';
 import BunnyMigrationController from '../../controllers/bunnyMigrationController.js';
 import BunnyController from '../../controllers/bunnyController.js';
-import B2HWebhookController from '../../controllers/b2hWebhookController.js';
 import { authLimiter } from '../config/middleware.js';
 
 export const setupRoutes = (app: Router) => {
@@ -76,6 +76,7 @@ export const setupRoutes = (app: Router) => {
   // Public routes
   app.use("/api/components_data", ComponentsDataController);
   app.use("/api/mpesa", MpesaController);
+  app.use("/api/support-tickets", SupportTicketsController);
 
   // Auth with rate limiting on login
   app.use("/api/auth/login", authLimiter);
@@ -121,6 +122,4 @@ export const setupRoutes = (app: Router) => {
     app.use("/api/bunny-upload", BunnyUploadController);
     app.use("/api/bunny-migrate", BunnyMigrationController);
     app.use("/api/bunny", BunnyController);
-    app.use("/api/webhooks/b2h", B2HWebhookController);
  };
-

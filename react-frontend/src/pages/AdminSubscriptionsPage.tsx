@@ -158,25 +158,25 @@ export default function AdminSubscriptionsPage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="text-white">
-              <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                <CreditCard className="h-8 w-8" />
+              <h1 className="mb-2 flex items-center gap-3 text-2xl font-bold sm:text-3xl">
+                <CreditCard className="h-6 w-6 flex-shrink-0 sm:h-8 sm:w-8" />
                 Subscription Types
               </h1>
               <p className="text-slate-300">
                 Manage subscription plans on the platform
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full flex-wrap gap-2 md:w-auto">
               <Button 
                 variant="outline" 
-                className="bg-white text-slate-800 hover:bg-slate-100"
+                className="flex-1 bg-white text-slate-800 hover:bg-slate-100 sm:flex-none"
                 onClick={() => navigate("/admin")}
               >
                 Back to Dashboard
               </Button>
               <Button 
                 variant="outline" 
-                className="bg-white text-slate-800 hover:bg-slate-100"
+                className="flex-1 bg-white text-slate-800 hover:bg-slate-100 sm:flex-none"
                 onClick={handleRefresh}
                 disabled={isLoading}
               >
@@ -184,7 +184,7 @@ export default function AdminSubscriptionsPage() {
                 Refresh
               </Button>
               <Button 
-                className="bg-primary hover:bg-primary/90"
+                className="flex-1 bg-primary hover:bg-primary/90 sm:flex-none"
                 onClick={() => handleOpenModal()}
               >
                 <Plus className="mr-2 h-4 w-4" />

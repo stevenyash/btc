@@ -4,8 +4,9 @@ import { X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MpesaPaymentModule } from "@/components/MpesaPaymentModule";
 import { useGuestStore } from "@/stores/useGuestStore";
-import { useMpesaStore } from "@/stores/useMpesaStore";
+import { useMpesaStore, type BusinessMetadata } from "@/stores/useMpesaStore";
 import { guestService, type Lesson } from "@/services/guest";
+import { getReferralCode } from "@/utils/referral";
 
 export interface LessonPurchaseModalProps {
   open: boolean;
@@ -33,7 +34,6 @@ export function LessonPurchaseModal({
   onPurchaseComplete,
   isExhausted = false,
 }: LessonPurchaseModalProps) {
-  const { checkAllPurchaseStatuses, lessons } = useGuestStore();
   const { reset: resetMpesa } = useMpesaStore();
 
   if (!open || !lesson) return null;
@@ -43,6 +43,9 @@ export function LessonPurchaseModal({
     : isSubscriber
       ? lessonFees.subscribed.fee
       : lessonFees.non_subscribed.fee;
+  const purchaseDuration = isExhausted || isSubscriber
+    ? lessonFees.subscribed.duration
+    : lessonFees.non_subscribed.duration;
   const accountReference = `lesson_${lesson.id}_${isExhausted ? "exhausted" : isSubscriber ? "subscriber" : "guest"}`;
   const defaultPhone = isExhausted
     ? userPhone || phone || ""
@@ -50,10 +53,13 @@ export function LessonPurchaseModal({
       ? userPhone || ""
       : phone || "";
   const businessMetadata = {
-    activationType: isExhausted ? "guestlessonactivation" : isSubscriber ? "subscribelessonactivation" : "guestlessonactivation",
+    activationType: isSubscriber ? "subscribelessonactivation" : "guestlessonactivation",
     lessonId: lesson.id,
     lessonFees: amount,
-    ...(isExhausted && { duration: lessonFees.subscribed.duration }),
+    ...(!isSubscriber && { referralCode: getReferralCode() || undefined }),
+    ...((isExhausted || !isSubscriber) && {
+      duration: isExhausted ? lessonFees.subscribed.duration : lessonFees.non_subscribed.duration,
+    }),
   };
 
   const handlePaymentSuccess = async (transaction: {
@@ -61,63 +67,32 @@ export function LessonPurchaseModal({
     transactionID?: string;
     amount: number;
     phoneNumber: string;
+    businessMetadata?: BusinessMetadata;
+    guestSessionKey?: string;
   }) => {
-    const phoneToUse = isExhausted ? (userPhone || phone) : phone;
-    if (!phoneToUse) return;
+    if (transaction.businessMetadata?.activationType === "guestlessonactivation") {
+      if (!transaction.phoneNumber) {
+        throw new Error("Payment confirmed, but the payment phone number is unavailable. Contact support before paying again.");
+      }
 
-    let purchaseRecorded = false;
-    try {
-      await guestService.purchaseLesson(phoneToUse, lesson.id, {
-        amount: transaction.amount,
-        checkoutRequestID: transaction.checkoutRequestID,
-        transactionID: transaction.transactionID,
-        ...(isExhausted && { duration: lessonFees.subscribed.duration }),
-      });
-      purchaseRecorded = true;
-    } catch (error) {
-      console.error("Purchase record error:", error);
-    }
+      const session = await guestService.activatePaymentSession(
+        transaction.checkoutRequestID,
+        transaction.guestSessionKey,
+        transaction.phoneNumber
+      );
+      const statuses = await guestService.getAllPurchaseStatuses(session.phone, [lesson.id]);
+      const status = statuses.find((item) => item.lesson_id === lesson.id);
+      if (!status?.purchased) {
+        throw new Error("Payment confirmed, but lesson access is still being prepared. Retry in a moment.");
+      }
 
-    if (!isSubscriber || isExhausted) {
-      const durationToUse = isExhausted ? lessonFees.subscribed.duration : lessonFees.non_subscribed.duration;
-      const expiresAt = new Date(Date.now() + durationToUse * 60 * 1000).toISOString();
-      const payments = JSON.parse(localStorage.getItem("guest_lesson_payments") || "{}");
-      payments[`${phoneToUse}_${lesson.id}`] = {
-        phone: phoneToUse,
-        lessonId: lesson.id,
-        checkoutRequestId: transaction.checkoutRequestID,
-        transactionStatus: "completed",
-        paidAt: new Date().toISOString(),
-        expiresAt,
-        watchTime: 0,
-      };
-      localStorage.setItem("guest_lesson_payments", JSON.stringify(payments));
-    }
-
-    if (isExhausted) {
-      const statuses = new Map(useGuestStore.getState().purchaseStatuses);
-      statuses.set(lesson.id, {
-        lesson_id: lesson.id,
-        purchased: true,
-        max_watch_time: lessonFees.subscribed.duration * 60,
-      });
-      useGuestStore.setState({ purchaseStatuses: statuses });
+      const purchaseStatuses = new Map(useGuestStore.getState().purchaseStatuses);
+      purchaseStatuses.set(lesson.id, status);
+      useGuestStore.setState({ purchaseStatuses });
     }
 
     resetMpesa();
     onPurchaseComplete();
-
-    const phoneForCheck = isExhausted ? (userPhone || phone) : phone;
-    if (phoneForCheck) {
-      const lessonIds = lessons.map((l) => l.id);
-      if (lessonIds.length > 0) {
-        await checkAllPurchaseStatuses(phoneForCheck, lessonIds);
-      }
-    }
-
-    if (!purchaseRecorded) {
-      toast.error("Payment may not be fully synced. Contact support if access is denied.");
-    }
   };
 
   const handlePaymentFailure = (error: string) => {
@@ -145,9 +120,9 @@ export function LessonPurchaseModal({
         <CardContent className="space-y-4">
           <div className="bg-muted p-4 rounded-lg">
             <p className="text-sm"><strong>Lesson:</strong> {lesson.title}</p>
-            <p className="text-sm"><strong>Watch Time:</strong> {lessonFees.subscribed.duration} minutes</p>
+            <p className="text-sm"><strong>Watch Time:</strong> {purchaseDuration} minutes</p>
             {isExhausted && (
-              <p className="text-sm text-orange-600"><strong>Note:</strong> Paying at subscriber rate since credits are exhausted.</p>
+              <p className="text-sm text-orange-600"><strong>Note:</strong> This lesson will have its own watch-time allowance and will not use package balances.</p>
             )}
           </div>
 
@@ -155,7 +130,7 @@ export function LessonPurchaseModal({
             <div className="bg-orange-50 p-3 rounded text-sm text-orange-800">
               <p className="font-semibold">Subscriber Rate</p>
               <p className="text-2xl font-bold">KES {lessonFees.subscribed.fee}</p>
-              <p className="text-xs">{lessonFees.subscribed.duration} min watch time</p>
+              <p className="text-xs">{purchaseDuration} min watch time</p>
             </div>
           ) : isSubscriber ? (
             <>

@@ -38,6 +38,7 @@ interface DeletionResult {
   success: boolean;
   data: {
     streamDeleted?: boolean;
+    storageDeleted?: boolean;
   };
   error?: string;
 }
@@ -118,6 +119,7 @@ export default class BunnyHelper {
           const tokenQuery = bunnyService.generateAdvancedToken(directoryPath, {
             expiresIn,
             tokenPath: directoryPath,
+            ignoreParams: true,
           });
 
           if (!tokenQuery) {
@@ -209,21 +211,22 @@ export default class BunnyHelper {
 
     // For storage paths, we use the same token generation approach
     // The storagePath is typically the file path in the pull zone
-    const tokenQuery = bunnyService.generateAdvancedToken(`/${storagePath}`, {
+    const encodedStoragePath = encodeURI(storagePath); // Encode spaces but keep slashes
+    const tokenQuery = bunnyService.generateAdvancedToken(`/${encodedStoragePath}`, {
       ...options,
-      tokenPath: `/${storagePath}`,
+      tokenPath: `/${encodedStoragePath}`,
     });
 
     if (!tokenQuery) {
       console.warn(`[BunnyHelper] Secure token generation failed for storage ${storagePath}. Falling back to unsecured URL.`);
       return {
-        url: `${bunnyConfig.pullZoneBaseUrl}/${storagePath}`,
+        url: `${bunnyConfig.pullZoneBaseUrl}/${encodeURI(storagePath)}`,
         token: null,
         expiresAt: null
       };
     }
 
-    const baseUrl = `${bunnyConfig.pullZoneBaseUrl}/${storagePath}`;
+    const baseUrl = `${bunnyConfig.pullZoneBaseUrl}/${encodeURI(storagePath)}`;
     const separator = baseUrl.includes('?') ? '&' : '?';
     const url = `${baseUrl}${separator}${tokenQuery}`;
 

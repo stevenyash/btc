@@ -32,6 +32,7 @@ type PaymentFormData = z.infer<typeof paymentSchema>
 
 interface PackageInfo {
   id: string;
+  subscription_type_id: number;
   name: string;
   fee: number;
   duration_amount: number;
@@ -117,15 +118,14 @@ export default function PackageCheckoutPage() {
         setTotalAmount(selectedPackage.fee)
         setSubscriptionFee(0)
       } else {
-        // Find cheapest subscription plan
-        if (subscriptionPlans && subscriptionPlans.length > 0) {
-          const cheapestPlan = subscriptionPlans.reduce((min, plan) =>
-            plan.membership_fee < min.membership_fee ? plan : min
-          )
-          setSubscriptionFee(cheapestPlan.membership_fee)
-          setTotalAmount(selectedPackage.fee + cheapestPlan.membership_fee)
+        const packagePlan = subscriptionPlans.find(
+          plan => plan.id === selectedPackage.subscription_type_id
+        )
+        if (packagePlan) {
+          setSubscriptionFee(packagePlan.membership_fee)
+          setTotalAmount(selectedPackage.fee + packagePlan.membership_fee)
         } else {
-          setTotalAmount(selectedPackage.fee)
+          setTotalAmount(0)
           setSubscriptionFee(0)
         }
       }
@@ -138,6 +138,7 @@ export default function PackageCheckoutPage() {
       if (pkg) {
         setSelectedPackage({
           id: pkg.id.toString(),
+          subscription_type_id: pkg.subscription_type_id,
           name: pkg.name,
           fee: pkg.fee,
           duration_amount: pkg.duration_amount,
@@ -238,9 +239,9 @@ export default function PackageCheckoutPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <CardTitle className="text-2xl font-bold text-green-600">Payment Initiated!</CardTitle>
+                <CardTitle className="text-2xl font-bold text-green-600">Payment Completed!</CardTitle>
                 <CardDescription>
-                  Please check your phone for the M-Pesa prompt
+                  Your package and subscription have been activated.
                 </CardDescription>
               </CardHeader>
               <CardFooter className="flex flex-col space-y-4">
@@ -371,4 +372,3 @@ export default function PackageCheckoutPage() {
     </Layout>
   )
 }
-
